@@ -279,6 +279,33 @@ struct cmd_spec cmd_table[] = {
       "-p PERIOD, --period=PERIOD     Period (us)\n"
       "-b BUDGET, --budget=BUDGET     Budget (us)\n"
     },
+    { "sched-tableau",
+      &main_sched_tableau, 0, 1,
+      "Get/set tableau scheduler parameters",
+      "[-d <Domain> [-v[=VCPUID/all]] [-p[=PERIOD]] [-b[=BUDGET]]]",
+      "-d DOMAIN, --domain=DOMAIN     Domain to modify\n"
+      "-v VCPUID/all, --vcpuid=VCPUID/all    VCPU to modify or output;\n"
+      "               Using '-v all' to modify/output all vcpus\n"
+      "-u UTILIZATION, --util=UTILIZATION     Utilization (%)\n"
+      "-l LATENCY, --latency=LATENCY     Max. Scheduling Latency (us)\n"
+    },
+    { "perf",
+      &main_perf, 0, 1,
+      "Get/set PMU parameter per domain, vcpu or system wide",
+      "[-i] | [[[[-c -e <<f><MNEMONIC1:...>>|<<r><ID1,MASK1:...>>] [-a <start|stop> [-k]]] | [-s[m|u] [-r <X|<X-Z|X,Y,Z,...>>]]] <[-d <Domain>] | [-v <VCPUID>]>]",
+      "-i, --information                            List of platform supported events and number of counters\n"
+      "-c, --configure                              Configure performance monitoring session\n"
+      "-e <f><MNEMONIC1:...> | <r><ID1,MASK1:...>   List of events to be monitored. The list can be specified either in a\n"
+      "                                                 friendly manner using the predefined events mnemonics or in a raw\n"
+      "                                                 manner by specifying the event ID and MASK. IDs are separated from\n"
+      "                                                 MASKs by a \",\". List elements use \":\" as separator for both formats\n"
+      "-s, --stats                                  Dump monitored session statistics\n"
+      "-r, --register                               Select over performance counter registers to be displayed(item, range, enumeration)\n"
+      "-k, --keep                                   Keep current counters/timestamps values\n"
+      "-d Domain, --domain=DOMAIN                   For which domain performance monitoring session will be enabled\n"
+      "-v VCPUID, --vcpuid=VCPUID,                  For which VCPU performance monitoring session will be enabled\n"
+      "-a <start|stop>, --action=<start|stop>       Start/stop a monitoring session\n"
+    },
     { "domid",
       &main_domid, 0, 0,
       "Convert a domain name to domain id",

@@ -1,3 +1,4 @@
+//#include <xen/config.h>
 #include <xen/init.h>
 #include <xen/string.h>
 #include <xen/delay.h>
@@ -319,6 +320,14 @@ static void generic_identify(struct cpuinfo_x86 *c)
 			    &c->x86_capability[cpufeat_word(X86_FEATURE_FSGSBASE)],
 			    &c->x86_capability[cpufeat_word(X86_FEATURE_PKU)],
 			    &c->x86_capability[cpufeat_word(X86_FEATURE_AVX512_4VNNIW)]);
+
+    /* Intel PMU flags*/
+    cpuid(0x0000000A, &eax, &ebx, &ecx, &edx);
+    c->x86_pmu = ((uint64_t)eax << x86_PMU_EAX_OFFSET) |
+                 ((uint64_t)edx << x86_PMU_EDX_OFFSET) |
+                 ((~(uint64_t)ebx) << x86_PMU_EBX_OFFSET);
+
+    //printk("CPU Performance Monitoring Capabilities: %#16lx\n", c->x86_pmu);
 }
 
 /*
@@ -341,6 +350,7 @@ void identify_cpu(struct cpuinfo_x86 *c)
 	c->cpu_core_id = XEN_INVALID_CORE_ID;
 	c->compute_unit_id = INVALID_CUID;
 	memset(&c->x86_capability, 0, sizeof c->x86_capability);
+    c->x86_pmu = 0;
 
 	generic_identify(c);
 
@@ -759,4 +769,16 @@ const struct x86_cpu_id *x86_match_cpu(const struct x86_cpu_id table[])
 		return m;
 	}
 	return NULL;
+}
+
+/*
+ * Get number of platform performance configurable counters
+ */
+// PMU: number of general purpose PMC
+inline const int get_num_pmcs() {
+    return x86_PMU_NOGPPMC(boot_cpu_data.x86_pmu);
+}
+
+inline const int get_pmc_width() {
+    return x86_PMU_GPCWIDTH(boot_cpu_data.x86_pmu);
 }

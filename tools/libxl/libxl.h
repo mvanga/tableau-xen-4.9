@@ -2042,6 +2042,22 @@ int libxl_sched_credit2_params_get(libxl_ctx *ctx, uint32_t poolid,
 int libxl_sched_credit2_params_set(libxl_ctx *ctx, uint32_t poolid,
                                    libxl_sched_credit2_params *scinfo);
 
+/* Perf PMCs */
+int libxl_perf_config(libxl_ctx *ctx, libxl_perf_cfg* pcfg);
+
+int libxl_perf_stats(libxl_ctx *ctx, void* stats);
+
+int libxl_perf_get_dom_max_vcpus(void);
+
+struct pme_info {
+    char *name;
+    char *mnemonic;
+    char *description;
+    uint32_t id;
+};
+
+int libxl_perf_get_arch_pme_info_tbl(struct pme_info **tbl);
+
 /* Scheduler Per-domain parameters */
 
 #define LIBXL_DOMAIN_SCHED_PARAM_WEIGHT_DEFAULT    -1
@@ -2051,6 +2067,8 @@ int libxl_sched_credit2_params_set(libxl_ctx *ctx, uint32_t poolid,
 #define LIBXL_DOMAIN_SCHED_PARAM_LATENCY_DEFAULT   -1
 #define LIBXL_DOMAIN_SCHED_PARAM_EXTRATIME_DEFAULT -1
 #define LIBXL_DOMAIN_SCHED_PARAM_BUDGET_DEFAULT    -1
+#define LIBXL_DOMAIN_SCHED_PARAM_UTIL_DEFAULT      -1
+#define LIBXL_DOMAIN_SCHED_PARAM_LAT_DEFAULT       -1
 
 /* Per-VCPU parameters */
 #define LIBXL_SCHED_PARAM_VCPU_INDEX_DEFAULT   -1

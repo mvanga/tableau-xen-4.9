@@ -425,6 +425,9 @@ void *xc_vm_event_enable(xc_interface *xch, domid_t domain_id, int param,
 
 int do_dm_op(xc_interface *xch, domid_t domid, unsigned int nr_bufs, ...);
 
+int do_tableau_op(xc_interface *xch,
+        unsigned long op, unsigned long length, void *buf);
+
 #endif /* __XC_PRIVATE_H__ */
 
 /*

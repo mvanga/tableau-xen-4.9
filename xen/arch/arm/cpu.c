@@ -59,6 +59,14 @@ void identify_cpu(struct cpuinfo_arm *c)
 }
 
 /*
+ * Get number of platform performance configurable counters
+ */
+inline const int get_num_configurable_pmcs() {
+#define DUMMY_NUM_CPUS  (2)
+    return DUMMY_NUM_CPUS;
+}
+
+/*
  * Local variables:
  * mode: C
  * c-file-style: "BSD"

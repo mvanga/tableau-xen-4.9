@@ -11,13 +11,14 @@
 XEN_ROOT	= $(CURDIR)/../..
 include $(XEN_ROOT)/tools/Rules.mk
 
-PROGRAMS = readnotes lsevtchn
+PROGRAMS = readnotes lsevtchn ttxentool
 
 CFLAGS += -Werror
 
 # incorrectly uses libxc internals
 CFLAGS_readnotes.o  := $(CFLAGS_libxenevtchn) $(CFLAGS_libxenctrl) $(CFLAGS_libxenguest) -I$(XEN_ROOT)/tools/libxc $(CFLAGS_libxencall)
 CFLAGS_lsevtchn.o   := $(CFLAGS_libxenevtchn) $(CFLAGS_libxenctrl)
+CFLAGS_ttxentool.o  := $(CFLAGS_libxenevtchn) $(CFLAGS_libxenctrl) $(CFLAGS_libxenguest) -I$(XEN_ROOT)/tools/libxc $(CFLAGS_libxencall)
 
 .PHONY: all
 all: build
@@ -30,6 +31,9 @@ readnotes: readnotes.o
 
 lsevtchn: lsevtchn.o
 	$(CC) $(LDFLAGS) $^ -o $@ $(LDLIBS_libxenctrl) $(APPEND_LDFLAGS)
+
+ttxentool: ttxentool.o
+	$(CC) $(LDFLAGS) $^ -o $@ $(LDLIBS_libxenctrl) $(LDLIBS_libxenguest) $(APPEND_LDFLAGS)
 
 .PHONY: install
 install: build

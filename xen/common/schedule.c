@@ -7,13 +7,14 @@
  *        File: common/schedule.c
  *      Author: Rolf Neugebauer & Keir Fraser
  *              Updated for generic API by Mark Williamson
- * 
+ *
  * Description: Generic CPU scheduling code
  *              implements support functionality for the Xen scheduler API.
  *
  */
 
 #ifndef COMPAT
+#include <xen/config.h>
 #include <xen/init.h>
 #include <xen/lib.h>
 #include <xen/sched.h>
@@ -37,6 +38,7 @@
 #include <public/sched.h>
 #include <xsm/xsm.h>
 #include <xen/err.h>
+#include <asm/perf.h>
 
 /* opt_sched: scheduler - default to configured value */
 static char __initdata opt_sched[10] = CONFIG_SCHED_DEFAULT;
@@ -49,7 +51,14 @@ string_param("sched", opt_sched);
 bool_t sched_smt_power_savings = 0;
 boolean_param("sched_smt_power_savings", sched_smt_power_savings);
 
-/* Default scheduling rate limit: 1ms 
+/*
+ * PMU data
+ */
+static uint16_t   num_pmcs = 0;
+static uint64_t** prev_vcpu_num_events = 0;
+static uint64_t*  prev_vcpu_tsc = 0;
+
+/* Default scheduling rate limit: 1ms
  * The behavior when sched_ratelimit_us is greater than sched_credit_tslice_ms is undefined
  * */
 int sched_ratelimit_us = SCHED_DEFAULT_RATELIMIT_US;
@@ -63,6 +72,9 @@ static void poll_timer_fn(void *data);
 /* This is global for now so that private implementations can reach it */
 DEFINE_PER_CPU(struct schedule_data, schedule_data);
 DEFINE_PER_CPU(struct scheduler *, scheduler);
+DEFINE_PER_CPU(uint64_t, sched_iteration);
+DEFINE_PER_CPU(uint64_t, post_sched_iteration);
+DEFINE_PER_CPU(uint64_t, wake_iteration);
 
 /* Scratch space for cpumasks. */
 DEFINE_PER_CPU(cpumask_t, cpumask_scratch);
@@ -253,7 +265,7 @@ static void sched_spin_unlock_double(spinlock_t *lock1, spinlock_t *lock2,
     spin_unlock_irqrestore(lock1, flags);
 }
 
-int sched_init_vcpu(struct vcpu *v, unsigned int processor) 
+int sched_init_vcpu(struct vcpu *v, unsigned int processor)
 {
     struct domain *d = v->domain;
 
@@ -280,6 +292,11 @@ int sched_init_vcpu(struct vcpu *v, unsigned int processor)
     v->sched_priv = SCHED_OP(dom_scheduler(d), alloc_vdata, v,
 		             d->sched_priv);
     if ( v->sched_priv == NULL )
+        return 1;
+
+    //get PMU supported number of counters
+    v->pms.vpmu.pmcs = xzalloc_array(struct pmc, num_pmcs);
+    if ( v->pms.vpmu.pmcs == NULL )
         return 1;
 
     /* Idle VCPUs are scheduled immediately, so don't put them in runqueue. */
@@ -470,6 +487,7 @@ void vcpu_wake(struct vcpu *v)
 {
     unsigned long flags;
     spinlock_t *lock;
+    int cpu = smp_processor_id();
 
     TRACE_2D(TRC_SCHED_WAKE, v->domain->domain_id, v->vcpu_id);
 
@@ -479,7 +497,16 @@ void vcpu_wake(struct vcpu *v)
     {
         if ( v->runstate.state >= RUNSTATE_blocked )
             vcpu_runstate_change(v, RUNSTATE_runnable, NOW());
+        TRACE_4D(TRC_SCHED_WAKE_START,
+                (per_cpu(wake_iteration, cpu) & 0xffffffff),
+                ((per_cpu(wake_iteration, cpu) >> 32) & 0xffffffff),
+                v->domain->domain_id,
+                v->vcpu_id);
         SCHED_OP(vcpu_scheduler(v), wake, v);
+        TRACE_2D(TRC_SCHED_WAKE_END,
+                (per_cpu(wake_iteration, cpu) & 0xffffffff),
+                ((per_cpu(wake_iteration, cpu) >> 32) & 0xffffffff));
+        *(&per_cpu(wake_iteration, cpu)) += 1;
     }
     else if ( !(v->pause_flags & VPF_blocked) )
     {
@@ -1268,11 +1295,11 @@ long do_set_timer_op(s_time_t timeout)
               unlikely((offset > 0) && ((uint32_t)(offset >> 50) != 0)) )
     {
         /*
-         * Linux workaround: occasionally we will see timeouts a long way in 
-         * the future due to wrapping in Linux's jiffy time handling. We check 
-         * for timeouts wrapped negative, and for positive timeouts more than 
-         * about 13 days in the future (2^50ns). The correct fix is to trigger 
-         * an interrupt immediately (since Linux in fact has pending work to 
+         * Linux workaround: occasionally we will see timeouts a long way in
+         * the future due to wrapping in Linux's jiffy time handling. We check
+         * for timeouts wrapped negative, and for positive timeouts more than
+         * about 13 days in the future (2^50ns). The correct fix is to trigger
+         * an interrupt immediately (since Linux in fact has pending work to
          * do in this situation). However, older guests also set a long timeout
          * when they have *no* pending timers at all: setting an immediate
          * timeout in this case can burn a lot of CPU. We therefore go for a
@@ -1353,6 +1380,215 @@ long sched_adjust_global(struct xen_sysctl_scheduler_op *op)
     return rc;
 }
 
+static void sched_config_vcpu_perf(struct vcpu *v, struct xen_sysctl_perf_config* c)
+{
+    int i = 0;
+    struct vpmu* vpmu = NULL;
+
+    vpmu = &v->pms.vpmu;
+    if (!v->is_pms_active && c->pmes_config.num) { //new config
+        v->is_pms_active = c->action;
+
+        vpmu->num_active_pmcs = 0;
+        for (i = 0; i < c->pmes_config.num; i++) {
+            struct pmc* pmc = &vpmu->pmcs[i];
+
+            // set event to be monitored
+            pmc->event = c->pmes_config.pmes[i].id;
+
+            // clear counters when applying new config
+            pmc->value.ref = pmc->value.abs = 0;
+            vpmu->num_active_pmcs++;
+
+            //printk("counter=%d, id=%#4x, keep=%u, ref=%lu, abs=%lu\n",
+            //        i, pmc->event, c->keep, pmc->value.ref, pmc->value.abs);
+        }
+        v->pms.lifespan.ref = v->pms.lifespan.abs = 0;
+    } else if (!v->is_pms_active && vpmu->num_active_pmcs) { //existing config
+        v->is_pms_active = c->action;
+
+        if (!c->keep) {
+            for (i = 0; i < vpmu->num_active_pmcs; i++)
+                vpmu->pmcs[i].value.abs = 0;
+            v->pms.lifespan.abs = 0;
+        }
+    } else if (!c->action) {  // stop monitoring session
+        v->is_pms_active = c->action;
+
+        // a session stop may arrive in the very
+        // middle of the current monitoring interval;
+        // update progress flag to reflect the change
+        if (!v->is_pms_active)
+            v->pms.is_pmi_in_progress = 0;
+    }
+    printk("configured action=%u, vcpu=%d, domid=%d\n",
+            v->is_pms_active, v->vcpu_id, v->domain->domain_id);
+}
+
+static long sched_perf_config(struct xen_sysctl_perf_config* config)
+{
+    int rc = 0;
+    int domids_cnt = 0;
+    struct vcpu *v = NULL;
+    struct domain *d = NULL;
+    struct cpupool *c = NULL;
+    unsigned int cpu = smp_processor_id();
+
+    c = per_cpu(cpupool, cpu);
+    if ( c == NULL )
+        goto out;
+
+    rcu_read_lock(&domlist_read_lock);
+    for_each_domain_in_cpupool( d, c )
+    {
+        if (is_idle_domain(d))
+            continue;
+
+        // if this is not the domain we're searching
+        // for, keep going; if DOMID_IDLE then
+        // it's applicable to all domains
+        if (config->domids.num &&
+                config->domids.idslist[domids_cnt] != d->domain_id)
+            continue;
+
+        for_each_vcpu ( d, v )
+        {
+            unsigned long flags;
+            spinlock_t *lock = vcpu_schedule_lock_irqsave(v, &flags);
+
+            // it this is not the vcpu we're interested in
+            // keep going; if XEN_LEGACY_MAX_VCPUS then
+            // our interest spans to all vcpus
+            if (config->vcpu != (XEN_LEGACY_MAX_VCPUS + 1) &&
+                    config->vcpu != v->vcpu_id) {
+                vcpu_schedule_unlock_irqrestore(lock, flags, v);
+                continue;
+            }
+
+            sched_config_vcpu_perf(v, config);
+
+            if (v->vcpu_id == config->vcpu) {
+                vcpu_schedule_unlock_irqrestore(lock, flags, v);
+                break;
+            }
+            vcpu_schedule_unlock_irqrestore(lock, flags, v);
+        }
+
+        if (config->domids.num &&
+                d->domain_id == config->domids.idslist[domids_cnt]) {
+            domids_cnt++;
+            if (domids_cnt == config->domids.num)
+                break;
+        }
+    }
+    rcu_read_unlock(&domlist_read_lock);
+
+out:
+    return rc;
+}
+
+static long sched_perf_stats(struct xen_sysctl_perf_stats* stats)
+{
+    int rc = 0;
+    uint8_t* ptr8 = NULL;
+    uint16_t* ptr16 = NULL;
+    uint64_t* ptr64 = NULL;
+    uint8_t* num_events = NULL;
+    uint16_t* num_vcpus = NULL;
+    uint16_t* num_domains = NULL;
+    struct vcpu *v = NULL;
+    struct domain *d = NULL;
+    struct cpupool *c = NULL;
+    unsigned int cpu = smp_processor_id();
+
+    c = per_cpu(cpupool, cpu);
+    if ( c == NULL )
+        goto out;
+
+    ptr16 = (uint16_t*) stats->buffer;
+    num_domains = ptr16;
+    *num_domains = 0;
+    ptr16++;
+
+    rcu_read_lock(&domlist_read_lock);
+    for_each_domain_in_cpupool( d, c )
+    {
+        if (is_idle_domain(d))
+            continue;
+        printk("collect counters for dom:%u\n", d->domain_id);
+        *ptr16 = d->domain_id;
+        ptr16++;
+        num_vcpus = ptr16;
+        *num_vcpus = 0;
+        ptr16++;
+
+        for_each_vcpu ( d, v )
+        {
+            int i = 0;
+            unsigned long flags = 0;
+            spinlock_t *lock = vcpu_schedule_lock_irqsave(v, &flags);
+
+            printk("collect counters for vcpu:%d\n", v->vcpu_id);
+            //num events
+            ptr8 = (uint8_t*)ptr16;
+            num_events = ptr8;
+            *num_events = num_pmcs;
+            ptr8++;
+            ptr16 = (uint16_t*)ptr8;
+
+            for (i = 0; i < num_pmcs; i++) {
+                struct pmc* pmc = &v->pms.vpmu.pmcs[i];
+
+                //event_i
+                *ptr16 = pmc->event;
+                ptr16++;
+                ptr64 = (uint64_t*)ptr16;
+
+                //counter_i
+                *ptr64 = pmc->value.abs;
+                ptr64++;
+                ptr16 = (uint16_t*)ptr64;
+                printk("counter: %d, event:%x, value:%lu\n",
+                        i, pmc->event, pmc->value.abs);
+            }
+
+            //tsc
+            ptr64 = (uint64_t*)ptr16;
+            *ptr64 = v->pms.lifespan.abs;
+            ptr64++;
+            ptr16 = (uint16_t*)ptr64;
+
+            *num_vcpus += 1;
+            vcpu_schedule_unlock_irqrestore(lock, flags, v);
+        }
+        *num_domains += 1;
+    }
+    rcu_read_unlock(&domlist_read_lock);
+
+out:
+    return rc;
+}
+
+long sched_do_perf(struct xen_sysctl_perf_op *op)
+{
+    int rc = 0;
+
+    switch(op->cmd) {
+        case XEN_PERF_config:
+            rc = sched_perf_config(&op->u.config);
+            break;
+
+        case XEN_PERF_stats:
+            rc = sched_perf_stats(&op->u.stats);
+            break;
+
+        default:
+            break;
+    }
+
+    return rc;
+}
+
 static void vcpu_periodic_timer_work(struct vcpu *v)
 {
     s_time_t now = NOW();
@@ -1374,7 +1610,79 @@ static void vcpu_periodic_timer_work(struct vcpu *v)
     set_timer(&v->periodic_timer, periodic_next_event);
 }
 
-/* 
+static void sched_perf_prologue(struct vcpu* v)
+{
+    int i;
+    struct pmc* pmc = NULL;
+    int cpu = smp_processor_id();
+
+    printk("prologue -> cpu=%d dom=%u vcpu=%u -> progress=%u ",
+            cpu, v->domain->domain_id, v->vcpu_id, v->pms.is_pmi_in_progress);
+
+    v->pms.is_pmi_in_progress = 1;
+    for (i = 0; i < v->pms.vpmu.num_active_pmcs; i++) {
+        pmc = &v->pms.vpmu.pmcs[i];
+
+        perf_set_event(i, pmc->event, USER_CTXT);
+        pmc->value.ref = perf_get_counter(i);
+
+        TRACE_5D(TRC_SCHED_VCPU_VPMU,
+                cpu, v->domain->domain_id, v->vcpu_id,
+                pmc->value.ref, pmc->event);
+        printk("cnt%d[ev=%#4x, ref=%lu, abs=%lu] ",
+                i, pmc->event, pmc->value.ref, pmc->value.abs);
+    }
+
+    v->pms.lifespan.ref = perf_get_tsc();
+
+    printk("tsc.ref=%lu, tsc.abs=%lu\n",
+            v->pms.lifespan.ref, v->pms.lifespan.abs);
+}
+
+static void sched_perf_epilogue(struct vcpu* v)
+{
+    int i;
+    struct pmc* pmc = NULL;
+    int cpu = smp_processor_id();
+
+#define ACCU_SAFE_UPDATE(accu, new, old, max) \
+    (accu) += ((new) < (old)) ? \
+        (max) - (old) + (new) : \
+        (new) - (old);
+
+    printk("epilogue -> cpu=%d dom=%u vcpu=%u -> progress=%u ",
+            cpu, v->domain->domain_id, v->vcpu_id, v->pms.is_pmi_in_progress);
+
+    if (!v->pms.is_pmi_in_progress)
+        return;
+    v->pms.is_pmi_in_progress = 0;
+
+    ACCU_SAFE_UPDATE(v->pms.lifespan.abs,
+            prev_vcpu_tsc[cpu], v->pms.lifespan.ref, 0xFFFFFFFFFFFFFFFF);
+
+    TRACE_6D(TRC_SCHED_VCPU_VPMU,
+            cpu, v->domain->domain_id, v->vcpu_id,
+            v->pms.lifespan.ref, v->pms.lifespan.abs, prev_vcpu_tsc[cpu]);
+
+    for (i = 0; i < v->pms.vpmu.num_active_pmcs; i++) {
+        pmc = &v->pms.vpmu.pmcs[i];
+
+        ACCU_SAFE_UPDATE(pmc->value.abs, prev_vcpu_num_events[cpu][i],
+                pmc->value.ref, ((uint64_t)1 << get_pmc_width()) - 1);
+
+        TRACE_6D(TRC_SCHED_VCPU_VPMU,
+                cpu, v->domain->domain_id, v->vcpu_id,
+                pmc->value.ref, pmc->value.abs, prev_vcpu_num_events[cpu][i]);
+
+        printk("cnt%d[ev=%#4x, ref=%lu, abs=%lu, crt=%lu] ", i, pmc->event,
+                pmc->value.ref, pmc->value.abs, prev_vcpu_num_events[cpu][i]);
+    }
+
+    printk("tsc.ref=%lu, tsc.abs=%lu, tsc.crt=%lu\n",
+            v->pms.lifespan.ref, v->pms.lifespan.abs, prev_vcpu_tsc[cpu]);
+}
+
+/*
  * The main function
  * - deschedule the current domain (scheduler independent).
  * - pick a new domain (scheduler dependent).
@@ -1390,6 +1698,7 @@ static void schedule(void)
     spinlock_t           *lock;
     struct task_slice     next_slice;
     int cpu = smp_processor_id();
+    int i;
 
     ASSERT_NOT_IN_ATOMIC();
 
@@ -1417,13 +1726,29 @@ static void schedule(void)
 
     lock = pcpu_schedule_lock_irq(cpu);
 
+    // get current values of the counters & current
+    // timestamp, in order to account previous vcpu
+    // activity for the time interval it was active
+    if (prev->is_pms_active) {
+        prev_vcpu_tsc[cpu] = perf_get_tsc();
+        for (i = 0; i < prev->pms.vpmu.num_active_pmcs; i++)
+            prev_vcpu_num_events[cpu][i] = perf_get_counter(i);
+    }
+
     now = NOW();
 
     stop_timer(&sd->s_timer);
-    
+
     /* get policy-specific decision on scheduling... */
     sched = this_cpu(scheduler);
+    TRACE_2D(TRC_SCHED_SCHED_START,
+            (per_cpu(sched_iteration, cpu) & 0xffffffff),
+            ((per_cpu(sched_iteration, cpu) >> 32) & 0xffffffff));
     next_slice = sched->do_schedule(sched, now, tasklet_work_scheduled);
+    TRACE_2D(TRC_SCHED_SCHED_END,
+            (per_cpu(sched_iteration, cpu) & 0xffffffff),
+            ((per_cpu(sched_iteration, cpu) >> 32) & 0xffffffff));
+    *(&per_cpu(sched_iteration, cpu)) += 1;
 
     next = next_slice.task;
 
@@ -1465,8 +1790,18 @@ static void schedule(void)
         now);
     prev->last_run_time = now;
 
+    // prev vcpu perf monitor epilogue
+    if (prev->is_pms_active) {
+        sched_perf_epilogue(prev);
+        printk("\n");
+    }
+
     ASSERT(next->runstate.state != RUNSTATE_running);
     vcpu_runstate_change(next, RUNSTATE_running, now);
+
+    // next vcpu perf monitor prologue
+    if (next->is_pms_active)
+        sched_perf_prologue(next);
 
     /*
      * NB. Don't add any trace records from here until the actual context
@@ -1492,6 +1827,8 @@ static void schedule(void)
 
 void context_saved(struct vcpu *prev)
 {
+    int cpu = smp_processor_id();
+
     /* Clear running flag /after/ writing context to memory. */
     smp_wmb();
 
@@ -1500,7 +1837,14 @@ void context_saved(struct vcpu *prev)
     /* Check for migration request /after/ clearing running flag. */
     smp_mb();
 
+    TRACE_2D(TRC_SCHED_CSAVED_START,
+            (per_cpu(post_sched_iteration, cpu) & 0xffffffff),
+            ((per_cpu(post_sched_iteration, cpu) >> 32) & 0xffffffff));
     SCHED_OP(vcpu_scheduler(prev), context_saved, prev);
+    TRACE_2D(TRC_SCHED_CSAVED_END,
+            (per_cpu(post_sched_iteration, cpu) & 0xffffffff),
+            ((per_cpu(post_sched_iteration, cpu) >> 32) & 0xffffffff));
+    *(&per_cpu(post_sched_iteration, cpu)) += 1;
 
     if ( unlikely(prev->pause_flags & VPF_migrating) )
         vcpu_migrate(prev);
@@ -1730,6 +2074,22 @@ void __init scheduler_init(void)
     this_cpu(schedule_data).sched_priv = SCHED_OP(&ops, alloc_pdata, 0);
     BUG_ON(IS_ERR(this_cpu(schedule_data).sched_priv));
     SCHED_OP(&ops, init_pdata, this_cpu(schedule_data).sched_priv, 0);
+
+    /* store in local to module variable the number of configurable PMC
+     * & alloc array to store their values each time a new VCPU is scheduled */
+    num_pmcs = get_num_pmcs();
+    printk("Current platform has support for %u configurable PMCs\n", num_pmcs);
+    {
+        prev_vcpu_tsc = xzalloc_array(uint64_t, get_num_processors());
+        BUG_ON(prev_vcpu_tsc == NULL);
+
+        prev_vcpu_num_events = xzalloc_array(uint64_t*, get_num_processors());
+        BUG_ON(prev_vcpu_num_events == NULL);
+        for (int i = 0; i < get_num_processors(); i++) {
+            prev_vcpu_num_events[i] = xzalloc_array(uint64_t, num_pmcs);
+            BUG_ON(prev_vcpu_num_events[i] == NULL);
+        }
+    }
 }
 
 /*

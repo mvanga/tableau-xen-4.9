@@ -148,6 +148,10 @@ do_dm_op(
     unsigned int nr_bufs,
     XEN_GUEST_HANDLE_PARAM(xen_dm_op_buf_t) bufs);
 
+extern long
+do_tableau_op(unsigned long op, unsigned long length,
+    XEN_GUEST_HANDLE_PARAM(void) arg);
+
 #ifdef CONFIG_COMPAT
 
 extern int

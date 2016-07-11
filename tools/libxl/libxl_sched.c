@@ -717,6 +717,284 @@ static int sched_rtds_domain_set(libxl__gc *gc, uint32_t domid,
     return 0;
 }
 
+static int sched_tableau_validate_params(libxl__gc *gc, int util, int lat)
+{
+    int rc;
+
+    //if (util < 1) {
+    //    LOG(ERROR, "Invalid VCPU util of %d (it should be >= 1)", util);
+    //    rc = ERROR_INVAL;
+    //    goto out;
+    //}
+
+    //if (lat < 1) {
+    //    LOG(ERROR, "Invalid VCPU lat of %d (it should be >= 1)", lat);
+    //    rc = ERROR_INVAL;
+    //    goto out;
+    //}
+
+    //if (lat > util) {
+    //    LOG(ERROR, "VCPU lat must be smaller than or equal to util, "
+    //               "but %d > %d", lat, util);
+    //    rc = ERROR_INVAL;
+    //    goto out;
+    //}
+    rc = 0;
+//out:
+    return rc;
+}
+
+/* Get the TABLEAU scheduling parameters of vcpu(s) */
+static int sched_tableau_vcpu_get(libxl__gc *gc, uint32_t domid,
+                               libxl_vcpu_sched_params *scinfo)
+{
+    uint32_t num_vcpus;
+    int i, r, rc;
+    xc_dominfo_t info;
+    struct xen_domctl_schedparam_vcpu *vcpus;
+
+    r = xc_domain_getinfo(CTX->xch, domid, 1, &info);
+    if (r < 0) {
+        LOGED(ERROR, domid, "Getting domain info");
+        rc = ERROR_FAIL;
+        goto out;
+    }
+
+    if (scinfo->num_vcpus <= 0) {
+        rc = ERROR_INVAL;
+        goto out;
+    } else {
+        num_vcpus = scinfo->num_vcpus;
+        GCNEW_ARRAY(vcpus, num_vcpus);
+        for (i = 0; i < num_vcpus; i++) {
+            if (scinfo->vcpus[i].vcpuid < 0 ||
+                scinfo->vcpus[i].vcpuid > info.max_vcpu_id) {
+                LOGD(ERROR, domid, "VCPU index is out of range, "
+                            "valid values are within range from 0 to %d",
+                            info.max_vcpu_id);
+                rc = ERROR_INVAL;
+                goto out;
+            }
+            vcpus[i].vcpuid = scinfo->vcpus[i].vcpuid;
+        }
+    }
+
+    r = xc_sched_tableau_vcpu_get(CTX->xch, domid, vcpus, num_vcpus);
+    if (r != 0) {
+        LOGED(ERROR, domid, "Getting vcpu sched tableau");
+        rc = ERROR_FAIL;
+        goto out;
+    }
+    scinfo->sched = LIBXL_SCHEDULER_TABLEAU;
+    for (i = 0; i < num_vcpus; i++) {
+        scinfo->vcpus[i].util = vcpus[i].u.tableau.util;
+        scinfo->vcpus[i].lat = vcpus[i].u.tableau.lat;
+        scinfo->vcpus[i].vcpuid = vcpus[i].vcpuid;
+    }
+    rc = 0;
+out:
+    return rc;
+}
+
+/* Get the TABLEAU scheduling parameters of all vcpus of a domain */
+static int sched_tableau_vcpu_get_all(libxl__gc *gc, uint32_t domid,
+                                   libxl_vcpu_sched_params *scinfo)
+{
+    uint32_t num_vcpus;
+    int i, r, rc;
+    xc_dominfo_t info;
+    struct xen_domctl_schedparam_vcpu *vcpus;
+
+    r = xc_domain_getinfo(CTX->xch, domid, 1, &info);
+    if (r < 0) {
+        LOGED(ERROR, domid, "Getting domain info");
+        rc = ERROR_FAIL;
+        goto out;
+    }
+
+    if (scinfo->num_vcpus > 0) {
+        rc = ERROR_INVAL;
+        goto out;
+    } else {
+        num_vcpus = info.max_vcpu_id + 1;
+        GCNEW_ARRAY(vcpus, num_vcpus);
+        for (i = 0; i < num_vcpus; i++)
+            vcpus[i].vcpuid = i;
+    }
+
+    r = xc_sched_tableau_vcpu_get(CTX->xch, domid, vcpus, num_vcpus);
+    if (r != 0) {
+        LOGED(ERROR, domid, "Getting vcpu sched tableau");
+        rc = ERROR_FAIL;
+        goto out;
+    }
+    scinfo->sched = LIBXL_SCHEDULER_TABLEAU;
+    scinfo->num_vcpus = num_vcpus;
+    scinfo->vcpus = libxl__calloc(NOGC, num_vcpus,
+                                  sizeof(libxl_sched_params));
+
+    for (i = 0; i < num_vcpus; i++) {
+        scinfo->vcpus[i].util = vcpus[i].u.tableau.util;
+        scinfo->vcpus[i].lat = vcpus[i].u.tableau.lat;
+        scinfo->vcpus[i].vcpuid = vcpus[i].vcpuid;
+    }
+    rc = 0;
+out:
+    return rc;
+}
+
+/* Set the TABLEAU scheduling parameters of vcpu(s) */
+static int sched_tableau_vcpu_set(libxl__gc *gc, uint32_t domid,
+                               const libxl_vcpu_sched_params *scinfo)
+{
+    int r, rc;
+    int i;
+    uint16_t max_vcpuid;
+    xc_dominfo_t info;
+    struct xen_domctl_schedparam_vcpu *vcpus;
+
+    r = xc_domain_getinfo(CTX->xch, domid, 1, &info);
+    if (r < 0) {
+        LOGED(ERROR, domid, "Getting domain info");
+        rc = ERROR_FAIL;
+        goto out;
+    }
+    max_vcpuid = info.max_vcpu_id;
+
+    if (scinfo->num_vcpus <= 0) {
+        rc = ERROR_INVAL;
+        goto out;
+    }
+    for (i = 0; i < scinfo->num_vcpus; i++) {
+        if (scinfo->vcpus[i].vcpuid < 0 ||
+            scinfo->vcpus[i].vcpuid > max_vcpuid) {
+            LOGD(ERROR, domid, "Invalid VCPU %d: valid range is [0, %d]",
+                        scinfo->vcpus[i].vcpuid, max_vcpuid);
+            rc = ERROR_INVAL;
+            goto out;
+        }
+        rc = sched_tableau_validate_params(gc, scinfo->vcpus[i].util,
+                                        scinfo->vcpus[i].lat);
+        if (rc) {
+            rc = ERROR_INVAL;
+            goto out;
+        }
+    }
+    GCNEW_ARRAY(vcpus, scinfo->num_vcpus);
+    for (i = 0; i < scinfo->num_vcpus; i++) {
+        vcpus[i].vcpuid = scinfo->vcpus[i].vcpuid;
+        vcpus[i].u.tableau.util = scinfo->vcpus[i].util;
+        vcpus[i].u.tableau.lat = scinfo->vcpus[i].lat;
+    }
+
+    r = xc_sched_tableau_vcpu_set(CTX->xch, domid,
+                               vcpus, scinfo->num_vcpus);
+    if (r != 0) {
+        LOGED(ERROR, domid, "Setting vcpu sched tableau");
+        rc = ERROR_FAIL;
+        goto out;
+    }
+    rc = 0;
+out:
+    return rc;
+}
+
+/* Set the TABLEAU scheduling parameters of all vcpus of a domain */
+static int sched_tableau_vcpu_set_all(libxl__gc *gc, uint32_t domid,
+                                   const libxl_vcpu_sched_params *scinfo)
+{
+    int r, rc;
+    int i;
+    uint16_t max_vcpuid;
+    xc_dominfo_t info;
+    struct xen_domctl_schedparam_vcpu *vcpus;
+    uint32_t num_vcpus;
+
+    r = xc_domain_getinfo(CTX->xch, domid, 1, &info);
+    if (r < 0) {
+        LOGED(ERROR, domid, "Getting domain info");
+        rc = ERROR_FAIL;
+        goto out;
+    }
+    max_vcpuid = info.max_vcpu_id;
+
+    if (scinfo->num_vcpus != 1) {
+        rc = ERROR_INVAL;
+        goto out;
+    }
+    if (sched_tableau_validate_params(gc, scinfo->vcpus[0].util,
+                                   scinfo->vcpus[0].lat)) {
+        rc = ERROR_INVAL;
+        goto out;
+    }
+    num_vcpus = max_vcpuid + 1;
+    GCNEW_ARRAY(vcpus, num_vcpus);
+    for (i = 0; i < num_vcpus; i++) {
+        vcpus[i].vcpuid = i;
+        vcpus[i].u.tableau.util = scinfo->vcpus[0].util;
+        vcpus[i].u.tableau.lat = scinfo->vcpus[0].lat;
+    }
+
+    r = xc_sched_tableau_vcpu_set(CTX->xch, domid,
+                               vcpus, num_vcpus);
+    if (r != 0) {
+        LOGED(ERROR, domid, "Setting vcpu sched tableau");
+        rc = ERROR_FAIL;
+        goto out;
+    }
+    rc = 0;
+out:
+    return rc;
+}
+
+static int sched_tableau_domain_get(libxl__gc *gc, uint32_t domid,
+                               libxl_domain_sched_params *scinfo)
+{
+    struct xen_domctl_sched_tableau sdom;
+    int rc;
+
+    rc = xc_sched_tableau_domain_get(CTX->xch, domid, &sdom);
+    if (rc != 0) {
+        LOGED(ERROR, domid, "Getting domain sched tableau");
+        return ERROR_FAIL;
+    }
+
+    libxl_domain_sched_params_init(scinfo);
+
+    scinfo->sched = LIBXL_SCHEDULER_TABLEAU;
+    scinfo->util = sdom.util;
+    scinfo->lat = sdom.lat;
+
+    return 0;
+}
+
+static int sched_tableau_domain_set(libxl__gc *gc, uint32_t domid,
+                               const libxl_domain_sched_params *scinfo)
+{
+    struct xen_domctl_sched_tableau sdom;
+    int rc;
+
+    rc = xc_sched_tableau_domain_get(CTX->xch, domid, &sdom);
+    if (rc != 0) {
+        LOGED(ERROR, domid, "Getting domain sched tableau");
+        return ERROR_FAIL;
+    }
+    if (scinfo->util != LIBXL_DOMAIN_SCHED_PARAM_UTIL_DEFAULT)
+        sdom.util = scinfo->util;
+    if (scinfo->lat != LIBXL_DOMAIN_SCHED_PARAM_LAT_DEFAULT)
+        sdom.lat = scinfo->lat;
+    if (sched_tableau_validate_params(gc, sdom.util, sdom.lat))
+        return ERROR_INVAL;
+
+    rc = xc_sched_tableau_domain_set(CTX->xch, domid, &sdom);
+    if (rc < 0) {
+        LOGED(ERROR, domid, "Setting domain sched tableau");
+        return ERROR_FAIL;
+    }
+
+    return 0;
+}
+
 int libxl_domain_sched_params_set(libxl_ctx *ctx, uint32_t domid,
                                   const libxl_domain_sched_params *scinfo)
 {
@@ -746,6 +1024,9 @@ int libxl_domain_sched_params_set(libxl_ctx *ctx, uint32_t domid,
         break;
     case LIBXL_SCHEDULER_NULL:
         ret=sched_null_domain_set(gc, domid, scinfo);
+        break;
+    case LIBXL_SCHEDULER_TABLEAU:
+        ret=sched_tableau_domain_set(gc, domid, scinfo);
         break;
     default:
         LOGD(ERROR, domid, "Unknown scheduler");
@@ -782,6 +1063,9 @@ int libxl_vcpu_sched_params_set(libxl_ctx *ctx, uint32_t domid,
     case LIBXL_SCHEDULER_RTDS:
         rc = sched_rtds_vcpu_set(gc, domid, scinfo);
         break;
+    case LIBXL_SCHEDULER_TABLEAU:
+        rc = sched_tableau_vcpu_set(gc, domid, scinfo);
+        break;
     default:
         LOGD(ERROR, domid, "Unknown scheduler");
         rc = ERROR_INVAL;
@@ -816,6 +1100,9 @@ int libxl_vcpu_sched_params_set_all(libxl_ctx *ctx, uint32_t domid,
         break;
     case LIBXL_SCHEDULER_RTDS:
         rc = sched_rtds_vcpu_set_all(gc, domid, scinfo);
+        break;
+    case LIBXL_SCHEDULER_TABLEAU:
+        rc = sched_tableau_vcpu_set_all(gc, domid, scinfo);
         break;
     default:
         LOGD(ERROR, domid, "Unknown scheduler");
@@ -854,6 +1141,9 @@ int libxl_domain_sched_params_get(libxl_ctx *ctx, uint32_t domid,
     case LIBXL_SCHEDULER_NULL:
         ret=sched_null_domain_get(gc, domid, scinfo);
         break;
+    case LIBXL_SCHEDULER_TABLEAU:
+        ret=sched_tableau_domain_get(gc, domid, scinfo);
+        break;
     default:
         LOGD(ERROR, domid, "Unknown scheduler");
         ret=ERROR_INVAL;
@@ -887,6 +1177,9 @@ int libxl_vcpu_sched_params_get(libxl_ctx *ctx, uint32_t domid,
     case LIBXL_SCHEDULER_RTDS:
         rc = sched_rtds_vcpu_get(gc, domid, scinfo);
         break;
+    case LIBXL_SCHEDULER_TABLEAU:
+        rc = sched_tableau_vcpu_get(gc, domid, scinfo);
+        break;
     default:
         LOGD(ERROR, domid, "Unknown scheduler");
         rc = ERROR_INVAL;
@@ -919,6 +1212,9 @@ int libxl_vcpu_sched_params_get_all(libxl_ctx *ctx, uint32_t domid,
         break;
     case LIBXL_SCHEDULER_RTDS:
         rc = sched_rtds_vcpu_get_all(gc, domid, scinfo);
+        break;
+    case LIBXL_SCHEDULER_TABLEAU:
+        rc = sched_tableau_vcpu_get_all(gc, domid, scinfo);
         break;
     default:
         LOGD(ERROR, domid, "Unknown scheduler");

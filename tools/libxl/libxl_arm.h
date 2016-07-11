@@ -18,6 +18,7 @@
 #include "libxl_arch.h"
 
 #include <xc_dom.h>
+#include <xen/arch-arm/xen.h>
 
 _hidden
 int libxl__prepare_acpi(libxl__gc *gc, libxl_domain_build_info *info,

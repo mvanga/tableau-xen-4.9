@@ -237,6 +237,7 @@ tools/tests/regression/downloads/*
 tools/tests/mem-sharing/memshrtool
 tools/tests/mce-test/tools/xen-mceinj
 tools/xcutils/lsevtchn
+tools/xcutils/ttxentool
 tools/xcutils/readnotes
 tools/xenbackendd/_paths.h
 tools/xenbackendd/xenbackendd

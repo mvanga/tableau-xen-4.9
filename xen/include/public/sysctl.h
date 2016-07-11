@@ -86,6 +86,30 @@ DEFINE_XEN_GUEST_HANDLE(xen_sysctl_tbuf_op_t);
  * Get physical information about the host machine
  */
 /* XEN_SYSCTL_physinfo */
+#define _XEN_SYSCTL_PMUCAP_cc       0
+#define XEN_SYSCTL_PMUCAP_cc        (1u<<_XEN_SYSCTL_PMUCAP_cc)
+#define _XEN_SYSCTL_PMUCAP_rc       1
+#define XEN_SYSCTL_PMUCAP_rc        (1u<<_XEN_SYSCTL_PMUCAP_rc)
+#define _XEN_SYSCTL_PMUCAP_instr    2
+#define XEN_SYSCTL_PMUCAP_instr     (1u<<_XEN_SYSCTL_PMUCAP_instr)
+#define _XEN_SYSCTL_PMUCAP_llcr     3
+#define XEN_SYSCTL_PMUCAP_llcr      (1u<<_XEN_SYSCTL_PMUCAP_llcr)
+#define _XEN_SYSCTL_PMUCAP_llcm     4
+#define XEN_SYSCTL_PMUCAP_llcm      (1u<<_XEN_SYSCTL_PMUCAP_llcm)
+#define _XEN_SYSCTL_PMUCAP_bri      5
+#define XEN_SYSCTL_PMUCAP_bri       (1u<<_XEN_SYSCTL_PMUCAP_bri)
+#define _XEN_SYSCTL_PMUCAP_brm      6
+#define XEN_SYSCTL_PMUCAP_brm       (1u<<_XEN_SYSCTL_PMUCAP_brm)
+struct xen_sysctl_pmuinfo {
+    int8_t version;
+    uint8_t gp_cnt_num;
+    uint8_t gp_cnt_width;
+    uint8_t ff_cnt_num;
+    uint8_t ff_cnt_width;
+    int8_t num_arch_events;
+    uint16_t flags;
+};
+typedef struct xen_sysctl_pmuinfo xen_sysctl_pmuinfo_t;
  /* (x86) The platform supports HVM guests. */
 #define _XEN_SYSCTL_PHYSCAP_hvm          0
 #define XEN_SYSCTL_PHYSCAP_hvm           (1u<<_XEN_SYSCTL_PHYSCAP_hvm)
@@ -108,6 +132,7 @@ struct xen_sysctl_physinfo {
 
     /* XEN_SYSCTL_PHYSCAP_??? */
     uint32_t capabilities;
+    struct xen_sysctl_pmuinfo pmuinfo;
 };
 typedef struct xen_sysctl_physinfo xen_sysctl_physinfo_t;
 DEFINE_XEN_GUEST_HANDLE(xen_sysctl_physinfo_t);
@@ -665,6 +690,47 @@ struct xen_sysctl_scheduler_op {
 typedef struct xen_sysctl_scheduler_op xen_sysctl_scheduler_op_t;
 DEFINE_XEN_GUEST_HANDLE(xen_sysctl_scheduler_op_t);
 
+struct xen_sysctl_perf_pme {
+    uint32_t id;
+};
+
+typedef struct xen_sysctl_perf_pme xen_sysctl_perf_pme_t;
+
+struct xen_sysctl_perf_pme_config {
+    uint16_t num;
+    struct xen_sysctl_perf_pme* pmes;
+};
+
+struct xen_sysctl_perf_domids {
+    uint16_t num;
+    uint32_t* idslist;
+};
+
+struct xen_sysctl_perf_config {
+    uint8_t action;
+    uint8_t keep;
+    struct xen_sysctl_perf_domids domids;
+    uint16_t domain;
+    uint16_t vcpu;
+    struct xen_sysctl_perf_pme_config pmes_config;
+};
+
+struct xen_sysctl_perf_stats {
+    void* buffer;
+};
+
+/* XEN_SYSCTL_perf_op */
+#define XEN_PERF_config                     1
+#define XEN_PERF_stats                      2
+struct xen_sysctl_perf_op {
+    uint8_t cmd;
+    union {
+        struct xen_sysctl_perf_config config;   /* IN*/
+        struct xen_sysctl_perf_stats stats;     /* OUT*/
+    } u;
+};
+typedef struct xen_sysctl_perf_op xen_sysctl_perf_op_t;
+
 /*
  * Output format of gcov data:
  *
@@ -1123,6 +1189,7 @@ struct xen_sysctl {
 #define XEN_SYSCTL_get_cpu_levelling_caps        25
 #define XEN_SYSCTL_get_cpu_featureset            26
 #define XEN_SYSCTL_livepatch_op                  27
+#define XEN_SYSCTL_perf_op                       28
     uint32_t interface_version; /* XEN_SYSCTL_INTERFACE_VERSION */
     union {
         struct xen_sysctl_readconsole       readconsole;
@@ -1144,6 +1211,7 @@ struct xen_sysctl {
         struct xen_sysctl_lockprof_op       lockprof_op;
         struct xen_sysctl_cpupool_op        cpupool_op;
         struct xen_sysctl_scheduler_op      scheduler_op;
+        struct xen_sysctl_perf_op           perf_op;
         struct xen_sysctl_gcov_op           gcov_op;
         struct xen_sysctl_psr_cmt_op        psr_cmt_op;
         struct xen_sysctl_psr_cat_op        psr_cat_op;

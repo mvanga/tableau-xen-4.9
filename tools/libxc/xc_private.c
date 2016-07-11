@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <errno.h>
 #include <assert.h>
 
 struct xc_interface_core *xc_interface_open(xentoollog_logger *logger,
@@ -329,6 +330,33 @@ long do_memory_op(xc_interface *xch, int cmd, void *arg, size_t len)
 
     xc_hypercall_bounce_post(xch, arg);
  out1:
+    return ret;
+}
+
+
+int do_tableau_op(xc_interface *xch,
+        unsigned long op, unsigned long length, void *buf)
+{
+    int ret = -1;
+    xc_hypercall_buffer_t *b;
+
+    DECLARE_HYPERCALL_BOUNCE(buf, length, XC_HYPERCALL_BUFFER_BOUNCE_BOTH);
+
+    if ((ret = xc_hypercall_bounce_pre(xch, buf))) {
+        PERROR("Could not bounce memory for tableau hypercall");
+        goto out;
+    }
+    b = HYPERCALL_BUFFER(buf);
+    { 
+        DECLARE_HYPERCALL_BUFFER_ARGUMENT(b);
+        ret = xencall3(xch->xcall, __HYPERVISOR_tableau_op, op, length, HYPERCALL_BUFFER_AS_ARG(b));
+        if (ret < 0) {
+            DPRINTF("failed miserably with error code: %d\n", ret);
+	    }
+    }
+    xc_hypercall_bounce_post(xch, buf);
+
+out:
     return ret;
 }
 

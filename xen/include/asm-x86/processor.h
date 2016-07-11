@@ -139,7 +139,172 @@ struct cpuinfo_x86 {
     __u32 cpu_core_id;     /* core ID of each logical CPU*/
     __u32 compute_unit_id; /* AMD compute unit ID of each logical CPU */
     unsigned short x86_clflush_size;
+    __u64 x86_pmu;         /* PMU information:
+                                b00-b07: PMU version ID
+                                b08-b15: number of general purpose PMC
+                                b16-b23: bit width of general purpose PMCs
+                                b24-b31: number of architectural performance monitoring event
+                                b32-b35: number of fixed function PMC
+                                b36-b43: width of fixed function PMCs
+                                b44-b47: RESERVED1
+                                    b48: branch misspredict retired event
+                                    b49: branch instructions retired event
+                                    b50: last-level cache misses event
+                                    b50: last-level cache reference event
+                                    b51: reference cycles event
+                                    b52: instruction retired event
+                                    b53: core cycle event
+                                b54-b64: RESERVED2
+                            */
 } __cacheline_aligned;
+
+#define x86_PMU_EAX_OFFSET          (0)
+#define x86_PMU_EDX_OFFSET          (x86_PMU_EAX_OFFSET + 32)
+#define x86_PMU_EBX_OFFSET          (x86_PMU_EDX_OFFSET + 16)
+
+#define BITFIELD_MASK(type, length, offset) \
+    (((length) >= 0) && ((offset) >= 0)) ? \
+    (((((type)1) << (length)) - 1) << (offset)) : \
+    (type) 0
+
+// PMU: version
+#define x86_PMU_VERSION_OFFSET      (0)
+#define x86_PMU_VERSION_LENGTH      (8)
+#define x86_PMU_VERSION_MASK        ( \
+        BITFIELD_MASK(uint64_t, x86_PMU_VERSION_LENGTH, x86_PMU_VERSION_OFFSET) \
+    )
+#define x86_PMU_VERSION(pmuinfo)    ( \
+        ((pmuinfo) & x86_PMU_VERSION_MASK) >> x86_PMU_VERSION_OFFSET \
+    )
+
+// PMU: number of general purpose PMC
+#define x86_PMU_NOGPPMC_OFFSET      (x86_PMU_VERSION_OFFSET + \
+                                            x86_PMU_VERSION_LENGTH)
+#define x86_PMU_NOGPPMC_LENGTH      (8)
+#define x86_PMU_NOGPPMC_MASK        ( \
+        BITFIELD_MASK(uint64_t, x86_PMU_NOGPPMC_LENGTH, x86_PMU_NOGPPMC_OFFSET) \
+    )
+#define x86_PMU_NOGPPMC(pmuinfo)    ( \
+        ((pmuinfo) & x86_PMU_NOGPPMC_MASK) >> x86_PMU_NOGPPMC_OFFSET \
+    )
+
+// PMU: general purpose PMC bit width
+#define x86_PMU_GPCWIDTH_OFFSET     (x86_PMU_NOGPPMC_OFFSET + \
+                                            x86_PMU_NOGPPMC_LENGTH)
+#define x86_PMU_GPCWIDTH_LENGTH     (8)
+#define x86_PMU_GPCWIDTH_MASK       ( \
+        BITFIELD_MASK(uint64_t, x86_PMU_GPCWIDTH_LENGTH, x86_PMU_GPCWIDTH_OFFSET) \
+    )
+#define x86_PMU_GPCWIDTH(pmuinfo)   ( \
+        ((pmuinfo) & x86_PMU_GPCWIDTH_MASK) >> x86_PMU_GPCWIDTH_OFFSET \
+    )
+
+// PMU: number of architectural events
+#define x86_PMU_NOARCHEV_OFFSET     (x86_PMU_GPCWIDTH_OFFSET + \
+                                        x86_PMU_GPCWIDTH_LENGTH)
+#define x86_PMU_NOARCHEV_LENGTH     (8)
+#define x86_PMU_NOARCHEV_MASK       ( \
+        BITFIELD_MASK(uint64_t, x86_PMU_NOARCHEV_LENGTH, x86_PMU_NOARCHEV_OFFSET) \
+    )
+#define x86_PMU_NOARCHEV(pmuinfo)   ( \
+        ((pmuinfo) & x86_PMU_NOARCHEV_MASK) >> x86_PMU_NOARCHEV_OFFSET\
+    )
+
+// PMU: number of fixed function PMC
+#define x86_PMU_NOFFPMC_OFFSET      (x86_PMU_NOARCHEV_OFFSET + \
+                                            x86_PMU_NOARCHEV_LENGTH)
+#define x86_PMU_NOFFPMC_LENGTH      (5)
+#define x86_PMU_NOFFPMC_MASK        ( \
+        BITFIELD_MASK(uint64_t, x86_PMU_NOFFPMC_LENGTH, x86_PMU_NOFFPMC_OFFSET) \
+    )
+#define x86_PMU_NOFFPMC(pmuinfo)    ( \
+        ((pmuinfo) & x86_PMU_NOFFPMC_MASK) >> x86_PMU_NOFFPMC_OFFSET \
+    )
+
+// PMU: fixed function PMC bit width
+#define x86_PMU_FFCWIDTH_OFFSET     (x86_PMU_NOFFPMC_OFFSET + \
+                                            x86_PMU_NOFFPMC_LENGTH)
+#define x86_PMU_FFCWIDTH_LENGTH     (7)
+#define x86_PMU_FFCWIDTH_MASK       ( \
+        BITFIELD_MASK(uint64_t, x86_PMU_FFCWIDTH_LENGTH, x86_PMU_FFCWIDTH_OFFSET) \
+    )
+#define x86_PMU_FFCWIDTH(pmuinfo)   ( \
+        ((pmuinfo) & x86_PMU_FFCWIDTH_MASK) >> x86_PMU_FFCWIDTH_OFFSET \
+    )
+
+// PMU: reserved
+#define x86_PMU_RESERVED1_OFFSET    (x86_PMU_FFCWIDTH_OFFSET + \
+                                            x86_PMU_FFCWIDTH_LENGTH)
+#define x86_PMU_RESERVED1_LENGTH     (4)
+#define x86_PMU_RESERVED1_MASK       ( \
+        BITFIELD_MASK(uint64_t, x86_PMU_RESERVED1_LENGTH, x86_PMU_RESERVED1_OFFSET) \
+    )
+#define x86_PMU_RESERVED1(pmuinfo)  ( \
+        ((pmuinfo) & x86_PMU_RESERVED1_MASK) >> x86_PMU_RESERVED1_OFFSET \
+    )
+
+// PMU: core cycle
+#define x86_PMU_CORECYCLE_OFFSET    (x86_PMU_RESERVED1_OFFSET + \
+                                            x86_PMU_RESERVED1_LENGTH)
+#define x86_PMU_CORECYCLE_LENGTH    (1)
+#define x86_PMU_CORECYCLE_MASK      ( \
+        BITFIELD_MASK(uint64_t, x86_PMU_CORECYCLE_LENGTH, x86_PMU_CORECYCLE_OFFSET) \
+    )
+#define x86_PMU_CORECYCLE(pmuinfo)  ((pmuinfo) & x86_PMU_CORECYCLE_MASK)
+
+// PMU: instruction retired
+#define x86_PMU_INSTRET_OFFSET1     (x86_PMU_CORECYCLE_OFFSET + \
+                                            x86_PMU_CORECYCLE_LENGTH)
+#define x86_PMU_INSTRET_LENGTH      (1)
+#define x86_PMU_INSTRET_MASK        ( \
+        BITFIELD_MASK(uint64_t, x86_PMU_INSTRET_LENGTH, x86_PMU_INSTRET_OFFSET1) \
+    )
+#define x86_PMU_INSTRET(pmuinfo)    ((pmuinfo) & x86_PMU_INSTRET_MASK)
+
+// PMU: referenced cycles
+#define x86_PMU_REFCYCLE_OFFSET     (x86_PMU_INSTRET_OFFSET1 + \
+                                            x86_PMU_INSTRET_LENGTH)
+#define x86_PMU_REFCYCLE_LENGTH     (1)
+#define x86_PMU_REFCYCLE_MASK       ( \
+        BITFIELD_MASK(uint64_t, x86_PMU_REFCYCLE_LENGTH, x86_PMU_REFCYCLE_OFFSET) \
+    )
+#define x86_PMU_REFCYCLE(pmuinfo)   ((pmuinfo) & x86_PMU_REFCYCLE_MASK)
+
+// PMU: LLC references
+#define x86_PMU_LLCREF_OFFSET    (x86_PMU_REFCYCLE_OFFSET + \
+                                            x86_PMU_REFCYCLE_LENGTH)
+#define x86_PMU_LLCREF_LENGTH       (1)
+#define x86_PMU_LLCREF_MASK         ( \
+        BITFIELD_MASK(uint64_t, x86_PMU_LLCREF_LENGTH, x86_PMU_LLCREF_OFFSET) \
+    )
+#define x86_PMU_LLCREF(pmuinfo)     ((pmuinfo) & x86_PMU_LLCREF_MASK)
+
+// PMU: LLC misses
+#define x86_PMU_LLCMISS_OFFSET1     (x86_PMU_LLCREF_OFFSET + \
+                                            x86_PMU_LLCREF_LENGTH)
+#define x86_PMU_LLCMISS_LENGTH      (1)
+#define x86_PMU_LLCMISS_MASK        ( \
+        BITFIELD_MASK(uint64_t, x86_PMU_LLCMISS_LENGTH, x86_PMU_LLCMISS_OFFSET1) \
+    )
+#define x86_PMU_LLCMISS(pmuinfo)    ((pmuinfo) & x86_PMU_LLCMISS_MASK)
+
+// PMU: Branch Instruction retired
+#define x86_PMU_BRIRET_OFFSET       (x86_PMU_LLCMISS_OFFSET1 + \
+                                            x86_PMU_LLCMISS_LENGTH)
+#define x86_PMU_BRIRET_LENGTH       (1)
+#define x86_PMU_BRIRET_MASK         ( \
+        BITFIELD_MASK(uint64_t, x86_PMU_BRIRET_LENGTH, x86_PMU_BRIRET_OFFSET) \
+    )
+#define x86_PMU_BRIRET(pmuinfo)     ((pmuinfo) & x86_PMU_BRIRET_MASK)
+
+// PMU: Branch Instruction misses
+#define x86_PMU_BRIMISS_OFFSET      (x86_PMU_BRIRET_OFFSET + \
+                                            x86_PMU_BRIRET_LENGTH)
+#define x86_PMU_BRIMISS_LENGTH      (1)
+#define x86_PMU_BRIMISS_MASK        ( \
+        BITFIELD_MASK(uint64_t, x86_PMU_BRIMISS_LENGTH, x86_PMU_BRIMISS_OFFSET) \
+    )
+#define x86_PMU_BRIMISS(pmuinfo)    ((pmuinfo) & x86_PMU_BRIMISS_MASK)
 
 /*
  * capabilities of CPUs
@@ -597,6 +762,8 @@ static inline uint8_t get_cpu_family(uint32_t raw, uint8_t *model,
     return fam;
 }
 
+const int get_num_pmcs(void);
+const int get_pmc_width(void);
 #endif /* !__ASSEMBLY__ */
 
 #endif /* __ASM_X86_PROCESSOR_H */

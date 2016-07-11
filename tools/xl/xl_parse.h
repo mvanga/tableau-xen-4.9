@@ -54,6 +54,22 @@ void trim(char_predicate_t predicate, const char *input, char **output);
 
 const char *get_action_on_shutdown_name(libxl_action_on_shutdown a);
 
+unsigned long parse_positive_number(char *str, unsigned int base);
+
+long parse_integer_number(char *str, unsigned int base);
+
+int parse_constrained_number(char* str, unsigned int base,
+        libxl_uintnum_constraints* constr, long* val);
+
+int parse_interval(char* str, char* sep,
+         libxl_uintnum_constraints* constr, long* ledge, long* redge);
+
+int parse_num_enumeration(char* str, char* sep,
+         libxl_uintnum_constraints* constr, long** array, uint32_t* num);
+
+int parse_str_enumeration(char* str,
+        char* sep, char*** array, uint32_t* num);
+
 #endif	/* XL_PARSE_H */
 
 /*

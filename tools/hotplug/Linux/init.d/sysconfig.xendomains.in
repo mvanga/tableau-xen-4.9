@@ -86,7 +86,7 @@ XENDOMAINS_SHUTDOWN_ALL="--all --wait"
 # This variable determines whether saved domains from XENDOMAINS_SAVE
 # will be restored on system startup. 
 #
-XENDOMAINS_RESTORE=true
+XENDOMAINS_RESTORE=false
 
 ## Type: string
 ## Default: /etc/xen/auto

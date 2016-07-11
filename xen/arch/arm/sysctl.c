@@ -12,7 +12,16 @@
 #include <xen/hypercall.h>
 #include <public/sysctl.h>
 
-void arch_do_physinfo(xen_sysctl_physinfo_t *pi) { }
+void arch_do_physinfo(xen_sysctl_physinfo_t *pi)
+{
+    pi->pmuinfo.version = -1;
+    pi->pmuinfo.gp_cnt_num = 1;
+    pi->pmuinfo.gp_cnt_width = 48;
+    pi->pmuinfo.ff_cnt_num = 0;
+    pi->pmuinfo.ff_cnt_width = 0;
+    pi->pmuinfo.num_arch_events = -1;
+    pi->pmuinfo.flags = 0;
+}
 
 long arch_do_sysctl(struct xen_sysctl *sysctl,
                     XEN_GUEST_HANDLE_PARAM(xen_sysctl_t) u_sysctl)

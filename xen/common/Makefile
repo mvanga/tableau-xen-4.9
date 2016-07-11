@@ -41,6 +41,7 @@ obj-$(CONFIG_SCHED_CREDIT) += sched_credit.o
 obj-$(CONFIG_SCHED_CREDIT2) += sched_credit2.o
 obj-$(CONFIG_SCHED_RTDS) += sched_rt.o
 obj-$(CONFIG_SCHED_NULL) += sched_null.o
+obj-$(CONFIG_SCHED_TABLEAU) += sched_tableau.o
 obj-y += schedule.o
 obj-y += shutdown.o
 obj-y += softirq.o
@@ -80,3 +81,5 @@ subdir-$(CONFIG_GCOV) += gcov
 
 subdir-y += libelf
 subdir-$(CONFIG_HAS_DEVICE_TREE) += libfdt
+
+obj-y += list_sort.o

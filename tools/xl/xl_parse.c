@@ -394,6 +394,26 @@ static unsigned long parse_ulong(const char *str)
     return val;
 }
 
+static long parse_long(const char *str, unsigned int base)
+{
+    char *endptr;
+    long val;
+
+    val = strtol(str, &endptr, base);
+    if (val == LONG_MAX || val == LONG_MIN) {
+        fprintf(stderr,
+            "xl: failed to convert \"%s\" to number, value too large\n", str);
+        exit(EXIT_FAILURE);
+    }
+    if (endptr && *endptr != '\0') {
+        fprintf(stderr,
+            "xl: failed to convert \"%s\" to number, invalid format\n", str);
+        exit(EXIT_FAILURE);
+    }
+
+    return val;
+}
+
 void replace_string(char **str, const char *val)
 {
     free(*str);
@@ -2209,6 +2229,118 @@ out:
     return rc;
 }
 
+unsigned long parse_positive_number(char *str, unsigned int base)
+{
+    return parse_ulong(str);
+}
+
+long parse_integer_number(char *str, unsigned int base)
+{
+    return parse_long(str, base);
+}
+
+int parse_constrained_number(char* str, unsigned int base,
+        libxl_uintnum_constraints* constr, long* val)
+{
+    int r = -1;
+    char *err = NULL;
+
+    errno = 0;
+    *val = strtol(str, &err, base);
+
+    if ((errno == ERANGE) &&
+            (*val == LONG_MAX || *val == LONG_MIN)) {
+        fprintf(stderr,
+            "err: provided number is too large\n");
+        goto out;
+    }
+
+    if (err && *err != '\0') {
+        fprintf(stderr,
+            "err: invalid format, number expected\n");
+        goto out;
+    }
+
+    if (*val < constr->min || *val > constr->max) {
+        fprintf(stderr, "err: value out of bounds(%u, %u)\n",
+                constr->min, constr->max);
+        goto out;
+    }
+
+    r = 0;
+
+out:
+    return r;
+}
+
+int parse_interval(char* str, char* sep,
+        libxl_uintnum_constraints* constr, long* ledge, long* redge) {
+    int r = -1;
+    char prefix[8] = { 0 };
+
+    memcpy(prefix, str, sep - str);
+
+    if (parse_constrained_number(prefix, 10, constr, ledge))
+        goto out;
+
+    if (parse_constrained_number(sep + 1, 10, constr, redge))
+        goto out;
+
+    // is this a logical valid interval
+    if (*redge < *ledge) {
+        fprintf(stderr,
+                "err: interval's left edge must less than right edge\n");
+        goto out;
+    }
+
+    r = 0;
+
+out:
+    return r;
+}
+
+int parse_num_enumeration(char* str, char* sep,
+         libxl_uintnum_constraints* constr, long** array, uint32_t* num)
+{
+    int r = -1;
+    int sz = 8;
+    long p = 0;
+    char* arg = NULL;
+    long* tmp = NULL;
+
+    *array = calloc(sz, sizeof(long));
+    if (!*array) {
+        fprintf(stderr,
+            "xl: memory alloc while parising enumeration failed\n");
+        goto out;
+    }
+
+    arg = strtok(str, sep);
+
+    do {
+        if (parse_constrained_number(arg, 10, constr, &p))
+            goto out;
+
+        if (*num == sz) {
+            sz *= 2;
+            tmp = realloc(*array, sz);
+            if (!tmp) {
+                fprintf(stderr,
+                    "xl: memory alloc while parising enumeration failed\n");
+                goto out;
+            }
+
+            *array = tmp;
+        }
+
+        (*array)[(*num)++] = p;
+    } while ((arg = strtok(NULL, sep)));
+
+    r = 0;
+
+out:
+    return r;
+}
 
 /*
  * Local variables:

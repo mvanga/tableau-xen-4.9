@@ -2,6 +2,52 @@
 #include "libxl_arch.h"
 
 #include <xc_dom.h>
+#include <xen/arch-x86/xen.h>
+
+struct arch_pme_info x86_pme_tbl[] = {
+    {
+        "cpu-cycles",
+        "cpuc",
+        "counts core clock cycles whenever logical CPU is not halted",
+        0x003C
+    },
+    {
+        "reference-cycles",
+        "refc",
+        "counts at fixed frequency whenever logical CPU is not halted",
+        0x013C
+    },
+    {
+        "instructions",
+        "inst",
+        "counts when the last micro-op of an instruction retires",
+        0x00C0
+    },
+    {
+        "cache-references",
+        "chcr",
+        "accesses to the LLC in which data is present(hit) or not present(miss)",
+        0x4F2E
+    },
+    {
+        "cache-misses",
+        "chcm",
+        "accesses to the LLC in which data is not present(miss)",
+        0x412E
+    },
+    {
+        "branch-instructions",
+        "brin",
+        "counts when the last micro-op of a bri retires",
+        0x00C4
+    },
+    {
+        "branch-misses",
+        "brms",
+        "counts when the last micro-op of a bri which corrected miss-prediction",
+        0x00C5
+    },
+};
 
 int libxl__arch_domain_prepare_config(libxl__gc *gc,
                                       libxl_domain_config *d_config,
@@ -585,6 +631,17 @@ void libxl__arch_domain_build_info_acpi_setdefault(
                                         libxl_domain_build_info *b_info)
 {
     libxl_defbool_setdefault(&b_info->acpi, true);
+}
+
+int libxl__arch_perf_get_dom_max_vcpus(void)
+{
+    return XEN_LEGACY_MAX_VCPUS;
+}
+
+int libxl__perf_get_arch_pme_info_tbl(struct arch_pme_info** tbl)
+{
+    *tbl = x86_pme_tbl;
+    return sizeof(x86_pme_tbl)/sizeof(struct arch_pme_info);
 }
 
 /*

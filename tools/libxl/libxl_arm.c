@@ -25,6 +25,105 @@
 #define DT_IRQ_TYPE_LEVEL_HIGH     0x00000004
 #define DT_IRQ_TYPE_LEVEL_LOW      0x00000008
 
+struct arch_pme_info arm_pme_tbl[] = {
+    {
+        "cpu-cycles",
+        "cpuc",
+        "counts core clock cycles whenever logical CPU is not halted",
+        0xFF,
+    },
+    {
+        "instructions",
+        "inst",
+        "instruction architecturally executed",
+        0x08,
+    },
+    {
+        "cache-references",
+        "cacr",
+        "data read/write operation that causes an access at the lowest level "
+            "of data/unified cache",
+        0x04,
+    },
+    {
+        "cache-misses",
+        "cacm",
+        "data read/write operation that causes a refill at the lowest level of"
+            " data/unified cache",
+        0x03,
+    },
+    {
+        "branch-instructions",
+        "brin",
+        "branches/change in program flow that could have been predicted by "
+            "the CPU branch prediction resources",
+        0x12,
+    },
+    {
+        "branch-misses",
+        "brms",
+        "counts the number of mispredicted or not-predicted branches executed",
+        0x10,
+    },
+    {
+        "bus-cycles",
+        "busc",
+        "bus cycle",
+        0x1D,
+    },
+    {
+        "L1-dcache-references",
+        "l1dr",
+        "data read/write operation that causes an access at the lowest level "
+            "of data/unified cache",
+        0x04,
+    },
+    {
+        "L1-dcache-misses",
+        "l1dm",
+        "data read/write operation that causes a refill at the lowest level "
+            "of data/unified cache",
+        0x03,
+    },
+    {
+        "L1-icache-loads",
+        "l1il",
+        "instruction cache access",
+        0x14,
+    },
+    {
+        "L1-icache-load-misses",
+        "l1im",
+        "instruction fetch that causes a refill at the lowest level of "
+            "instruction/unified cache",
+        0x01,
+    },
+    {
+        "LLC-references",
+        "llcr",
+        "level 2 data cache access",
+        0x16,
+    },
+    {
+        "LLC-misses",
+        "llcm",
+        "level 2 data cache refill",
+        0x17,
+    },
+    {
+        "dTLB-misses",
+        "dtlm",
+        "data read/write operation that causes a TLB refill at the lowest level of TLB",
+        0x05,
+    },
+    {
+        "iTLB-misses",
+        "itlm",
+        "instruction fetch that causes a TLB refill at the lowest level of TLB",
+        0x02,
+    }
+};
+
 static const char *gicv_to_string(uint8_t gic_version)
 {
     switch (gic_version) {
@@ -1063,6 +1162,17 @@ void libxl__arch_domain_build_info_acpi_setdefault(
                                         libxl_domain_build_info *b_info)
 {
     libxl_defbool_setdefault(&b_info->acpi, false);
+}
+
+int libxl__arch_perf_get_dom_max_vcpus(void)
+{
+    return XEN_LEGACY_MAX_VCPUS;
+}
+
+int libxl__perf_get_arch_pme_info_tbl(struct arch_pme_info** tbl)
+{
+    *tbl = arm_pme_tbl;
+    return sizeof(arm_pme_tbl)/sizeof(struct arch_pme_info);
 }
 
 /*

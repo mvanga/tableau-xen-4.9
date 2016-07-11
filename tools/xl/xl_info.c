@@ -186,6 +186,30 @@ static void output_nodeinfo(void)
     maybe_printf("machine                : %s\n", utsbuf.machine);
 }
 
+static void output_pmuinfo(libxl_pmuinfo* pmuinfo)
+{
+    maybe_printf("pmu_ver                : %u\n", pmuinfo->ver);
+    maybe_printf("#gp_counters_lcore     : %u\n", pmuinfo->gp_cnt_num);
+    maybe_printf("#gp_counters_width     : %u\n", pmuinfo->gp_cnt_width);
+    maybe_printf("#arch_events           : %u\n", pmuinfo->num_arch_events);
+    maybe_printf("#ff_counters_lcore     : %u\n", pmuinfo->ff_cnt_num);
+    maybe_printf("#ff_counters_width     : %u\n", pmuinfo->ff_cnt_width);
+    maybe_printf("core_cycle             : %s\n",
+            pmuinfo->core_cycles_avail ? "true" : "false");
+    maybe_printf("instr_retired          : %s\n",
+            pmuinfo->instructions ? "true" : "false");
+    maybe_printf("referenced_cycle       : %s\n",
+            pmuinfo->reference_cycles_avail ? "true" : "false");
+    maybe_printf("llc_referenced         : %s\n",
+            pmuinfo->llc_reference_avail ? "true" : "false");
+    maybe_printf("llc_miss               : %s\n",
+            pmuinfo->llc_misses_avail ? "true" : "false");
+    maybe_printf("branch_instr_retired   : %s\n",
+            pmuinfo->branch_instr_avail ? "true" : "false");
+    maybe_printf("branch_instr_miss      : %s\n",
+            pmuinfo->branch_mispredict_avail ? "true" : "false");
+}
+
 static void output_physinfo(void)
 {
     libxl_physinfo info;
@@ -204,6 +228,8 @@ static void output_physinfo(void)
     maybe_printf("cores_per_socket       : %d\n", info.cores_per_socket);
     maybe_printf("threads_per_core       : %d\n", info.threads_per_core);
     maybe_printf("cpu_mhz                : %d\n", info.cpu_khz / 1000);
+
+    output_pmuinfo(&info.pmuinfo);
 
     maybe_printf("hw_caps                : %08x:%08x:%08x:%08x:%08x:%08x:%08x:%08x\n",
          info.hw_cap[0], info.hw_cap[1], info.hw_cap[2], info.hw_cap[3],

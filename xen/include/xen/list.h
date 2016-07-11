@@ -991,5 +991,9 @@ static inline void hlist_add_after_rcu(struct hlist_node *prev,
           ({ tpos = hlist_entry(pos, typeof(*tpos), member); 1;});      \
           pos = pos->next)
 
+void list_sort(void *priv, struct list_head *head,
+        int (*cmp)(void *priv, struct list_head *a,
+            struct list_head *b));
+
 #endif /* __XEN_LIST_H__ */
 

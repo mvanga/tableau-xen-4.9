@@ -968,6 +968,21 @@ int xc_sched_rtds_vcpu_get(xc_interface *xch,
                            struct xen_domctl_schedparam_vcpu *vcpus,
                            uint32_t num_vcpus);
 
+int xc_sched_tableau_domain_set(xc_interface *xch,
+                            uint32_t domid,
+                            struct xen_domctl_sched_tableau *sdom);
+int xc_sched_tableau_domain_get(xc_interface *xch,
+                            uint32_t domid,
+                            struct xen_domctl_sched_tableau *sdom);
+int xc_sched_tableau_vcpu_set(xc_interface *xch,
+                           uint32_t domid,
+                           struct xen_domctl_schedparam_vcpu *vcpus,
+                           uint32_t num_vcpus);
+int xc_sched_tableau_vcpu_get(xc_interface *xch,
+                           uint32_t domid,
+                           struct xen_domctl_schedparam_vcpu *vcpus,
+                           uint32_t num_vcpus);
+
 int
 xc_sched_arinc653_schedule_set(
     xc_interface *xch,
@@ -979,6 +994,14 @@ xc_sched_arinc653_schedule_get(
     xc_interface *xch,
     uint32_t cpupool_id,
     struct xen_sysctl_arinc653_schedule *schedule);
+
+
+typedef xen_sysctl_perf_op_t xc_perf_t;
+typedef xen_sysctl_perf_pme_t xc_perf_pme_t;
+
+int xc_perf_config(xc_interface* xch, xc_perf_t* config);
+
+int xc_perf_stats(xc_interface *xch, void* buffer);
 
 /**
  * This function sends a trigger to a domain.

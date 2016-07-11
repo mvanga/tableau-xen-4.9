@@ -47,6 +47,7 @@ obj-y += mpparse.o
 obj-y += nmi.o
 obj-y += numa.o
 obj-y += pci.o
+obj-y += perf.o
 obj-y += percpu.o
 obj-y += physdev.o x86_64/physdev.o
 obj-y += platform_hypercall.o x86_64/platform_hypercall.o

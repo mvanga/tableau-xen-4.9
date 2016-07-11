@@ -684,6 +684,236 @@ int main_sched_credit2(int argc, char **argv)
 }
 
 /*
+ * <nothing>            : List all domain parameters and sched params
+ * -d [domid]           : List default domain params for domain
+ * -d [domid] [params]  : Set domain params for domain
+ * -d [domid] -v [vcpuid 1] -v [vcpuid 2] ...  :
+ *
+ * List per-VCPU params for domain
+ * -d [domid] -v all  : List all per-VCPU params for domain
+ * -v all  : List all per-VCPU params for all domains
+ * -d [domid] -v [vcpuid 1] [params] -v [vcpuid 2] [params] ...  :
+ * Set per-VCPU params for domain
+ * -d [domid] -v all [params]  : Set all per-VCPU params for domain
+ */
+int main_sched_tableau(int argc, char **argv)
+{
+    const char *dom = NULL;
+    const char *cpupool = NULL;
+    int *vcpus = (int *)xmalloc(sizeof(int)); /* IDs of VCPUs that change */
+    int *utils = (int *)xmalloc(sizeof(int)); /* period is in microsecond */
+    int *lats = (int *)xmalloc(sizeof(int)); /* budget is in microsecond */
+    int v_size = 1; /* size of vcpus array */
+    int u_size = 1; /* size of utilizations array */
+    int l_size = 1; /* size of latencies array */
+    int v_index = 0; /* index in vcpus array */
+    int u_index =0; /* index in utilizations array */
+    int l_index =0; /* index for in latencies array */
+    bool opt_u = false;
+    bool opt_l = false;
+    bool opt_v = false;
+    bool opt_t = false;
+    bool opt_all = false; /* output per-dom parameters */
+    int opt, i, r;
+    int type;
+    //int rc;
+    static struct option opts[] = {
+        {"domain", 1, 0, 'd'},
+        {"utilization", 1, 0, 'u'},
+        {"latency", 1, 0, 'l'},
+        {"type", 1, 0, 't'},
+        {"vcpuid",1, 0, 'v'},
+        {"cpupool", 1, 0, 'c'},
+        COMMON_LONG_OPTS
+    };
+
+    SWITCH_FOREACH_OPT(opt, "d:u:l:v:c:t", opts, "sched-tableau", 0) {
+    case 'd':
+        dom = optarg;
+        break;
+    case 'u':
+        if (u_index >= u_size) {
+            /*
+             * periods array is full
+             * double the array size for new elements
+             */
+            u_size *= 2;
+            utils = xrealloc(utils, u_size);
+        }
+        utils[u_index++] = strtol(optarg, NULL, 10);
+        opt_u = 1;
+        break;
+    case 'l':
+        if (l_index >= l_size) { /* budgets array is full */
+            l_size *= 2;
+            lats = xrealloc(lats, l_size);
+        }
+        lats[l_index++] = strtol(optarg, NULL, 10);
+        opt_l = 1;
+        break;
+    case 'v':
+        if (!strcmp(optarg, "all")) { /* get or set all vcpus of a domain */
+            opt_all = 1;
+            break;
+        }
+        if (v_index >= v_size) { /* vcpus array is full */
+            v_size *= 2;
+            vcpus = xrealloc(vcpus, v_size);
+        }
+        vcpus[v_index++] = strtol(optarg, NULL, 10);
+        opt_v = 1;
+        break;
+    case 'c':
+        cpupool = optarg;
+        break;
+    case 't':
+        type = strtol(optarg, NULL, 10);
+        opt_t = 1;
+        break;
+    }
+
+    if (cpupool && (dom || opt_u || opt_l || opt_v || opt_all)) {
+        fprintf(stderr, "Specifying a cpupool is not allowed with "
+                "other options.\n");
+        r = EXIT_FAILURE;
+        goto out;
+    }
+    if (!dom && (opt_u || opt_l || opt_v)) {
+        fprintf(stderr, "Missing parameters.\n");
+        r = EXIT_FAILURE;
+        goto out;
+    }
+    if (dom && !opt_v && !opt_all && (opt_u || opt_l)) {
+        fprintf(stderr, "Must specify VCPU.\n");
+        r = EXIT_FAILURE;
+        goto out;
+    }
+    if (opt_v && opt_all) {
+        fprintf(stderr, "Incorrect VCPU IDs.\n");
+        r = EXIT_FAILURE;
+        goto out;
+    }
+    if (((v_index > l_index) && opt_l) || ((v_index > u_index) && opt_u)
+        || u_index != l_index) {
+        fprintf(stderr, "Incorrect number of period and budget\n");
+        r = EXIT_FAILURE;
+        goto out;
+    }
+
+    if ((!dom) && opt_all) {
+        /* get all domain's per-vcpu tableau scheduler parameters */
+        printf("Printing all data of all vCPUs\n");
+        r = EXIT_FAILURE;
+        goto out;
+        //rc = -sched_vcpu_output(LIBXL_SCHEDULER_RTDS,
+        //                        sched_rtds_vcpu_output_all,
+        //                        sched_rtds_pool_output,
+        //                        cpupool);
+        //if (rc) {
+        //    r = EXIT_FAILURE;
+        //    goto out;
+        //}
+    } else if (!dom && !opt_all) {
+        printf("Printing all data of all domains\n");
+        r = EXIT_FAILURE;
+        goto out;
+        /* list all domain's default scheduling parameters */
+        //rc = -sched_domain_output(LIBXL_SCHEDULER_RTDS,
+        //                          sched_rtds_domain_output,
+        //                          sched_rtds_pool_output,
+        //                          cpupool);
+        //if (rc) {
+        //    r = EXIT_FAILURE;
+        //    goto out;
+        //}
+    } else {
+        uint32_t domid = find_domain(dom);
+        printf("command for domain %lu\n", (unsigned long)domid);
+        if (!opt_v && !opt_all) { /* output default scheduling parameters */
+            printf("Printing all data of specific domain\n");
+            r = EXIT_FAILURE;
+            goto out;
+            //sched_rtds_domain_output(-1);
+            //rc = -sched_rtds_domain_output(domid);
+            //if (rc) {
+            //    r = EXIT_FAILURE;
+            //    goto out;
+            //}
+        } else if (!opt_u && !opt_l) {
+            /* get per-vcpu rtds scheduling parameters */
+            //libxl_vcpu_sched_params scinfo;
+            //libxl_vcpu_sched_params_init(&scinfo);
+            //sched_rtds_vcpu_output(-1, &scinfo);
+            //scinfo.num_vcpus = v_index;
+            if (v_index > 0) {
+                printf("Printing data for specific vCPU\n");
+                for (i = 0; i < v_index; i++)
+                    printf("vcpu: %d\n", vcpus[i]);
+                //scinfo.vcpus = (libxl_sched_params *)
+                //               xmalloc(sizeof(libxl_sched_params) * (v_index));
+                //for (i = 0; i < v_index; i++)
+                //    scinfo.vcpus[i].vcpuid = vcpus[i];
+                //rc = -sched_rtds_vcpu_output(domid, &scinfo);
+            } else { /* get params for all vcpus */
+                printf("Printing params for all vCPUs\n");
+                //rc = -sched_rtds_vcpu_output_all(domid, &scinfo);
+            }
+            r = EXIT_FAILURE;
+            goto out;
+            //libxl_vcpu_sched_params_dispose(&scinfo);
+            //if (rc) {
+            //    r = EXIT_FAILURE;
+            //    goto out;
+            //}
+        } else if (opt_v || opt_all) {
+            ///* set per-vcpu rtds scheduling parameters */
+            //libxl_vcpu_sched_params scinfo;
+            //libxl_vcpu_sched_params_init(&scinfo);
+            //scinfo.sched = LIBXL_SCHEDULER_RTDS;
+            if (v_index > 0) {
+                printf("Setting params for specific vCPUs\n");
+                for (i = 0; i < v_index; i++)
+                    printf("vcpu: %d\n", vcpus[i]);
+                r = EXIT_FAILURE;
+                goto out;
+                //scinfo.num_vcpus = v_index;
+                //scinfo.vcpus = (libxl_sched_params *)
+                //    xmalloc(sizeof(libxl_sched_params) * (v_index));
+                //for (i = 0; i < v_index; i++) {
+                //    scinfo.vcpus[i].vcpuid = vcpus[i];
+                //    scinfo.vcpus[i].period = periods[i];
+                //    scinfo.vcpus[i].budget = budgets[i];
+                //}
+                //rc = sched_vcpu_set(domid, &scinfo);
+            } else { /* set params for all vcpus */
+                printf("Setting params for all vCPUs\n");
+                r = EXIT_FAILURE;
+                goto out;
+                //scinfo.num_vcpus = 1;
+                //scinfo.vcpus = (libxl_sched_params *)
+                //    xmalloc(sizeof(libxl_sched_params));
+                //scinfo.vcpus[0].period = periods[0];
+                //scinfo.vcpus[0].budget = budgets[0];
+                //rc = sched_vcpu_set_all(domid, &scinfo);
+            }
+
+            //libxl_vcpu_sched_params_dispose(&scinfo);
+            //if (rc) {
+            //    r = EXIT_FAILURE;
+            //    goto out;
+            //}
+        }
+    }
+
+    r = EXIT_SUCCESS;
+out:
+    free(vcpus);
+    free(utils);
+    free(lats);
+    return r;
+}
+
+/*
  * <nothing>            : List all domain paramters and sched params
  * -d [domid]           : List default domain params for domain
  * -d [domid] [params]  : Set domain params for domain

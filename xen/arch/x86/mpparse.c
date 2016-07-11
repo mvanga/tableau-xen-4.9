@@ -1101,5 +1101,10 @@ int mp_register_gsi (u32 gsi, int triggering, int polarity)
 				       triggering, polarity);
 }
 
+inline int get_num_processors(void)
+{
+    return num_processors;
+}
+
 #endif /* CONFIG_X86_IO_APIC */
 #endif /* CONFIG_ACPI */

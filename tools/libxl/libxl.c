@@ -3,7 +3,7 @@
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published
- * by the Free Software Foundation; version 2.1 only. with the special
+ * by the Free Software Foundation; version 3.1 only. with the special
  * exception on linking described in file LICENSE.
  *
  * This program is distributed in the hope that it will be useful,
@@ -397,6 +397,27 @@ int libxl_get_physinfo(libxl_ctx *ctx, libxl_physinfo *physinfo)
     physinfo->cap_hvm = !!(xcphysinfo.capabilities & XEN_SYSCTL_PHYSCAP_hvm);
     physinfo->cap_hvm_directio =
         !!(xcphysinfo.capabilities & XEN_SYSCTL_PHYSCAP_hvm_directio);
+
+    physinfo->pmuinfo.ver = xcphysinfo.pmuinfo.version;
+    physinfo->pmuinfo.gp_cnt_num = xcphysinfo.pmuinfo.gp_cnt_num;
+    physinfo->pmuinfo.gp_cnt_width = xcphysinfo.pmuinfo.gp_cnt_width;
+    physinfo->pmuinfo.ff_cnt_num = xcphysinfo.pmuinfo.ff_cnt_num;
+    physinfo->pmuinfo.ff_cnt_width = xcphysinfo.pmuinfo.ff_cnt_width;
+    physinfo->pmuinfo.num_arch_events = xcphysinfo.pmuinfo.num_arch_events;
+    physinfo->pmuinfo.core_cycles_avail =
+        (xcphysinfo.pmuinfo.flags & XEN_SYSCTL_PMUCAP_cc) ? 1:0;
+    physinfo->pmuinfo.reference_cycles_avail =
+        (xcphysinfo.pmuinfo.flags & XEN_SYSCTL_PMUCAP_rc) ? 1:0;
+    physinfo->pmuinfo.instructions =
+        (xcphysinfo.pmuinfo.flags & XEN_SYSCTL_PMUCAP_instr) ? 1:0;
+    physinfo->pmuinfo.llc_reference_avail =
+        (xcphysinfo.pmuinfo.flags & XEN_SYSCTL_PMUCAP_llcr) ? 1:0;
+    physinfo->pmuinfo.llc_misses_avail =
+        (xcphysinfo.pmuinfo.flags & XEN_SYSCTL_PMUCAP_llcm) ? 1:0;
+    physinfo->pmuinfo.branch_instr_avail =
+        (xcphysinfo.pmuinfo.flags & XEN_SYSCTL_PMUCAP_bri) ? 1:0;
+    physinfo->pmuinfo.branch_mispredict_avail =
+        (xcphysinfo.pmuinfo.flags & XEN_SYSCTL_PMUCAP_brm) ? 1:0;
 
     GC_FREE;
     return 0;

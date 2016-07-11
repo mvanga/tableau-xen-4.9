@@ -192,6 +192,7 @@ libxl_scheduler = Enumeration("scheduler", [
     (7, "arinc653"),
     (8, "rtds"),
     (9, "null"),
+    (10, "tableau"),
     ])
 
 # Consistent with SHUTDOWN_* in sched.h (apart from UNKNOWN)
@@ -401,6 +402,8 @@ libxl_sched_params = Struct("sched_params",[
     ("period",       integer, {'init_val': 'LIBXL_DOMAIN_SCHED_PARAM_PERIOD_DEFAULT'}),
     ("extratime",    integer, {'init_val': 'LIBXL_DOMAIN_SCHED_PARAM_EXTRATIME_DEFAULT'}),
     ("budget",       integer, {'init_val': 'LIBXL_DOMAIN_SCHED_PARAM_BUDGET_DEFAULT'}),
+    ("util",         integer, {'init_val': 'LIBXL_DOMAIN_SCHED_PARAM_UTIL_DEFAULT'}),
+    ("lat",          integer, {'init_val': 'LIBXL_DOMAIN_SCHED_PARAM_LAT_DEFAULT'}),
     ])
 
 libxl_vcpu_sched_params = Struct("vcpu_sched_params",[
@@ -414,6 +417,8 @@ libxl_domain_sched_params = Struct("domain_sched_params",[
     ("cap",          integer, {'init_val': 'LIBXL_DOMAIN_SCHED_PARAM_CAP_DEFAULT'}),
     ("period",       integer, {'init_val': 'LIBXL_DOMAIN_SCHED_PARAM_PERIOD_DEFAULT'}),
     ("budget",       integer, {'init_val': 'LIBXL_DOMAIN_SCHED_PARAM_BUDGET_DEFAULT'}),
+    ("util",         integer, {'init_val': 'LIBXL_DOMAIN_SCHED_PARAM_UTIL_DEFAULT'}),
+    ("lat",          integer, {'init_val': 'LIBXL_DOMAIN_SCHED_PARAM_LAT_DEFAULT'}),
 
     # The following three parameters ('slice', 'latency' and 'extratime') are deprecated,
     # and will have no effect if used, since the SEDF scheduler has been removed.
@@ -865,6 +870,22 @@ libxl_vcpuinfo = Struct("vcpuinfo", [
     ("cpumap_soft", libxl_bitmap), # current soft cpu affinity
     ], dir=DIR_OUT)
 
+libxl_pmuinfo = Struct("pmuinfo", [
+    ("ver", uint8),
+    ("gp_cnt_num", uint8),
+    ("gp_cnt_width", uint8),
+    ("ff_cnt_num", uint8),
+    ("ff_cnt_width", uint8),
+    ("num_arch_events", uint8),
+    ("core_cycles_avail", bool),
+    ("reference_cycles_avail", bool),
+    ("instructions", bool),
+    ("llc_reference_avail", bool),
+    ("llc_misses_avail", bool),
+    ("branch_instr_avail", bool),
+    ("branch_mispredict_avail", bool),
+    ], dir=DIR_OUT)
+
 libxl_physinfo = Struct("physinfo", [
     ("threads_per_core", uint32),
     ("cores_per_socket", uint32),
@@ -885,6 +906,7 @@ libxl_physinfo = Struct("physinfo", [
 
     ("cap_hvm", bool),
     ("cap_hvm_directio", bool),
+    ("pmuinfo", libxl_pmuinfo),
     ], dir=DIR_OUT)
 
 # NUMA node characteristics: size and free are how much memory it has, and how
@@ -982,4 +1004,43 @@ libxl_psr_cat_info = Struct("psr_cat_info", [
     ("cos_max", uint32),
     ("cbm_len", uint32),
     ("cdp_enabled", bool),
+    ])
+
+libxl_pmcs = Struct("pmcs", [
+    ("buffer",  Array(uint8, "size")),
+    ])
+
+libxl_pme = Struct("pme", [
+    ("id", uint32),
+    ])
+
+libxl_pme_list = Struct("pme_list", [
+    ("pmes", Array(libxl_pme, "num")),
+    ])
+
+libxl_domid_list = Struct("domid_list", [
+    ("domids", Array(uint32, "num")),
+    ])
+
+libxl_perf_action = Enumeration("perf_action_type", [
+    (0, "STOP"),
+    (1, "START"),
+    ])
+
+libxl_perf_cfg = Struct("perf_cfg", [
+    ("action", libxl_perf_action),
+    ("keep",  uint8),
+    ("vcpuid", uint8),
+    ("domidlist",  libxl_domid_list),
+    ("eventslist", libxl_pme_list),
+    ])
+
+libxl_intnum_constraints = Struct("intnum_constraints", [
+    ("min",  integer),
+    ("max",  integer),
+    ])
+
+libxl_uintnum_constraints = Struct("uintnum_constraints", [
+    ("min",  uint32),
+    ("max",  uint32),
     ])

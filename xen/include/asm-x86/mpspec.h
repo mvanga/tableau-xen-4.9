@@ -19,6 +19,8 @@ extern int mpc_default_type;
 extern unsigned long mp_lapic_addr;
 extern bool_t pic_mode;
 
+extern int get_num_processors(void);
+
 #ifdef CONFIG_ACPI
 extern int mp_register_lapic(u32 id, bool_t enabled, bool_t hotplug);
 extern void mp_unregister_lapic(uint32_t apic_id, uint32_t cpu);

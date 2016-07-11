@@ -15,6 +15,13 @@
 #ifndef LIBXL_ARCH_H
 #define LIBXL_ARCH_H
 
+struct arch_pme_info {
+    char *name;
+    char *mnemonic;
+    char *description;
+    uint32_t id;
+};
+
 /* fill the arch specific configuration for the domain */
 _hidden
 int libxl__arch_domain_prepare_config(libxl__gc *gc,
@@ -79,5 +86,24 @@ int libxl__dom_load_acpi(libxl__gc *gc,
                          const libxl_domain_build_info *b_info,
                          struct xc_dom_image *dom);
 #endif
+
+_hidden
+int libxl__arch_perf_get_dom_max_vcpus(void);
+
+typedef enum {
+    LIBXL__ARCH_PMU_ARCH_EVENT_CORE_CYCLES,
+    LIBXL__ARCH_PMU_ARCH_EVENT_REFERENCE_CYCLES,
+    LIBXL__ARCH_PMU_ARCH_EVENT_CACHE_MISSES,
+    LIBXL__ARCH_PMU_ARCH_EVENT_CACHE_REFERENCES,
+    LIBXL__ARCH_PMU_ARCH_EVENT_INSTRUCTIONS,
+    LIBXL__ARCH_PMU_ARCH_EVENT_BRANCH_INSTRUCTIONS,
+    LIBXL__ARCH_PMU_ARCH_EVENT_BRANCH_MISPREDICTIONS,
+} libxl__pmu_arch_event_t;
+
+_hidden
+int libxl__perf_get_arch_event_id(libxl__pmu_arch_event_t e);
+
+_hidden
+int libxl__perf_get_arch_pme_info_tbl(struct arch_pme_info** tbl);
 
 #endif

@@ -80,6 +80,27 @@ void arch_do_physinfo(xen_sysctl_physinfo_t *pi)
         pi->capabilities |= XEN_SYSCTL_PHYSCAP_hvm;
     if ( iommu_enabled )
         pi->capabilities |= XEN_SYSCTL_PHYSCAP_hvm_directio;
+
+    pi->pmuinfo.version = x86_PMU_VERSION(boot_cpu_data.x86_pmu);
+    pi->pmuinfo.gp_cnt_num = x86_PMU_NOGPPMC(boot_cpu_data.x86_pmu);
+    pi->pmuinfo.gp_cnt_width = x86_PMU_GPCWIDTH(boot_cpu_data.x86_pmu);
+    pi->pmuinfo.ff_cnt_num = x86_PMU_NOFFPMC(boot_cpu_data.x86_pmu);
+    pi->pmuinfo.ff_cnt_width = x86_PMU_FFCWIDTH(boot_cpu_data.x86_pmu);
+    pi->pmuinfo.num_arch_events = x86_PMU_NOARCHEV(boot_cpu_data.x86_pmu);
+    if (x86_PMU_CORECYCLE(boot_cpu_data.x86_pmu))
+        pi->pmuinfo.flags |= XEN_SYSCTL_PMUCAP_cc;
+    if (x86_PMU_INSTRET(boot_cpu_data.x86_pmu))
+        pi->pmuinfo.flags |= XEN_SYSCTL_PMUCAP_instr;
+    if (x86_PMU_REFCYCLE(boot_cpu_data.x86_pmu))
+        pi->pmuinfo.flags |= XEN_SYSCTL_PMUCAP_rc;
+    if (x86_PMU_LLCREF(boot_cpu_data.x86_pmu))
+        pi->pmuinfo.flags |= XEN_SYSCTL_PMUCAP_llcr;
+    if (x86_PMU_LLCMISS(boot_cpu_data.x86_pmu))
+        pi->pmuinfo.flags |= XEN_SYSCTL_PMUCAP_llcm;
+    if (x86_PMU_BRIRET(boot_cpu_data.x86_pmu))
+        pi->pmuinfo.flags |= XEN_SYSCTL_PMUCAP_bri;
+    if (x86_PMU_BRIMISS(boot_cpu_data.x86_pmu))
+        pi->pmuinfo.flags |= XEN_SYSCTL_PMUCAP_brm;
 }
 
 long arch_do_sysctl(

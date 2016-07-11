@@ -139,6 +139,32 @@ void evtchn_destroy_final(struct domain *d); /* from complete_domain_destroy */
 
 struct waitqueue_vcpu;
 
+//accumulator counter
+struct counter {
+    uint64_t ref;         /* reference value*/
+    uint64_t abs;         /* absolute value*/
+};
+
+//performance monitoring counter
+struct pmc {
+    uint32_t event;       /* counted event num & msk*/
+    uint32_t flags;       /* config mask: enable, user/kernel, ...*/
+    struct counter value; /* actual counting values*/
+};
+
+//mirror of the PMU in software
+struct vpmu {
+    struct pmc* pmcs;           /* performance monitoring counters array*/
+    uint32_t num_active_pmcs;   /* number of configured performance counters*/
+};
+
+//performance monitoring session
+struct pms {
+    struct counter lifespan;    /* pms's lifespan in clk ticks*/
+    struct vpmu vpmu;           /* virtual PMU*/
+    bool_t is_pmi_in_progress;  /* performance monitoring interval*/
+};
+
 struct vcpu
 {
     int              vcpu_id;
@@ -157,6 +183,8 @@ struct vcpu
     struct timer     singleshot_timer;
 
     struct timer     poll_timer;    /* timeout for SCHEDOP_poll */
+
+    struct pms      pms;            /* performance monitoring session*/
 
     void            *sched_priv;    /* scheduler-specific data */
 
@@ -185,6 +213,9 @@ struct vcpu
     bool             is_running;
     /* VCPU should wake fast (do not deep sleep the CPU). */
     bool             is_urgent;
+
+    /* Is PMS active? */
+    bool             is_pms_active;
 
 #ifdef VCPU_TRAP_LAST
 #define VCPU_TRAP_NONE    0
@@ -648,6 +679,7 @@ void sched_destroy_domain(struct domain *d);
 int sched_move_domain(struct domain *d, struct cpupool *c);
 long sched_adjust(struct domain *, struct xen_domctl_scheduler_op *);
 long sched_adjust_global(struct xen_sysctl_scheduler_op *);
+long sched_do_perf(struct xen_sysctl_perf_op *op);
 int  sched_id(void);
 void sched_tick_suspend(void);
 void sched_tick_resume(void);
